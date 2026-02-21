@@ -1,0 +1,21 @@
+[package]
+name = "alice-legal"
+version = "0.1.0"
+edition = "2021"
+authors = ["Moroya Sakamoto"]
+description = "ALICE-Legal — Deterministic legal tree compilation, contract execution, administrative procedure events"
+license = "MIT"
+repository = "https://github.com/ext-sakamoro/ALICE-Legal"
+
+[dependencies]
+
+[lib]
+name = "alice_legal"
+path = "src/lib.rs"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
