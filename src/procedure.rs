@@ -266,4 +266,158 @@ mod tests {
         assert_eq!(latest.sequence, 1);
         assert_eq!(latest.kind, StepKind::Review);
     }
+
+    #[test]
+    fn test_first_step_prev_hash_is_zero() {
+        let mut proc = Procedure::new(10);
+        proc.add_step(StepKind::Application, "citizen", "submit", NS);
+        assert_eq!(proc.steps[0].prev_hash, 0);
+    }
+
+    #[test]
+    fn test_content_hash_nonzero_for_step() {
+        let mut proc = Procedure::new(11);
+        proc.add_step(StepKind::Review, "officer", "reviewed all documents", NS);
+        assert_ne!(proc.steps[0].content_hash, 0);
+    }
+
+    #[test]
+    fn test_actor_hash_nonzero_for_step() {
+        let mut proc = Procedure::new(12);
+        proc.add_step(StepKind::Application, "applicant-007", "form submitted", NS);
+        assert_ne!(proc.steps[0].actor_hash, 0);
+    }
+
+    #[test]
+    fn test_sequence_numbers_increment_from_zero() {
+        let mut proc = Procedure::new(13);
+        for expected_seq in 0u32..5 {
+            proc.add_step(StepKind::Amendment, "clerk", "amendment", NS * expected_seq as u64);
+            assert_eq!(proc.steps.last().unwrap().sequence, expected_seq);
+        }
+    }
+
+    #[test]
+    fn test_verify_chain_single_step() {
+        let mut proc = Procedure::new(14);
+        proc.add_step(StepKind::Application, "user", "only step", NS);
+        // Single-step chain has nothing to verify — must return true
+        assert!(proc.verify_chain());
+    }
+
+    #[test]
+    fn test_verify_chain_empty_procedure() {
+        let proc = Procedure::new(15);
+        // Empty chain is trivially valid
+        assert!(proc.verify_chain());
+    }
+
+    #[test]
+    fn test_tamper_first_step_breaks_second_link() {
+        let mut proc = Procedure::new(16);
+        proc.add_step(StepKind::Application, "alice", "step one", NS);
+        proc.add_step(StepKind::Review, "bob", "step two", 2 * NS);
+        assert!(proc.verify_chain());
+
+        // Tamper with the first step's content_hash: the second step's prev_hash is now wrong
+        proc.steps[0].content_hash ^= 0x1;
+        assert!(!proc.verify_chain());
+    }
+
+    #[test]
+    fn test_status_after_approval() {
+        let mut proc = Procedure::new(17);
+        proc.add_step(StepKind::Application, "user", "apply", NS);
+        proc.add_step(StepKind::Approval, "authority", "grant", 2 * NS);
+        assert_eq!(proc.status, ProcedureStatus::Approved);
+    }
+
+    #[test]
+    fn test_status_notification_does_not_change_terminal_state() {
+        // After Approved, a Notification step should not downgrade status
+        let mut proc = Procedure::new(18);
+        proc.add_step(StepKind::Application, "user", "apply", NS);
+        proc.add_step(StepKind::Approval, "officer", "approved", 2 * NS);
+        proc.add_step(StepKind::Notification, "system", "letter sent", 3 * NS);
+        // Status should be Approved (set by Approval), then Notification is not a terminal kind,
+        // so check what the implementation does: Notification goes to the `_` arm which
+        // leaves status unchanged if it was already non-Pending.
+        assert_eq!(proc.status, ProcedureStatus::Approved);
+    }
+
+    #[test]
+    fn test_procedure_id_wraps_value() {
+        let proc = Procedure::new(77);
+        assert_eq!(proc.id, ProcedureId(77));
+        assert_eq!(proc.id.0, 77);
+    }
+
+    #[test]
+    fn test_all_step_kinds_can_be_added() {
+        let mut proc = Procedure::new(20);
+        let kinds = [
+            StepKind::Application,
+            StepKind::Review,
+            StepKind::Approval,
+            StepKind::Rejection,
+            StepKind::Amendment,
+            StepKind::Notification,
+            StepKind::Completion,
+        ];
+        for (i, kind) in kinds.iter().enumerate() {
+            proc.add_step(*kind, "actor", "content", (i as u64 + 1) * NS);
+        }
+        assert_eq!(proc.steps.len(), 7);
+        assert!(proc.verify_chain());
+    }
+
+    #[test]
+    fn test_reject_helper_sets_content_hash_for_reason() {
+        let mut proc = Procedure::new(21);
+        proc.add_step(StepKind::Application, "user", "apply", NS);
+        proc.reject("officer", "incomplete documentation", 2 * NS);
+        let last = proc.latest_step().unwrap();
+        // content_hash must be nonzero (reason text was hashed)
+        assert_ne!(last.content_hash, 0);
+        assert_eq!(last.kind, StepKind::Rejection);
+    }
+
+    #[test]
+    fn test_complete_helper_sets_content_hash() {
+        let mut proc = Procedure::new(22);
+        proc.add_step(StepKind::Application, "user", "apply", NS);
+        proc.complete("director", 2 * NS);
+        let last = proc.latest_step().unwrap();
+        assert_ne!(last.content_hash, 0);
+        assert_eq!(last.kind, StepKind::Completion);
+    }
+
+    #[test]
+    fn test_different_actors_produce_different_hashes() {
+        let mut p1 = Procedure::new(23);
+        let mut p2 = Procedure::new(24);
+        p1.add_step(StepKind::Application, "alice", "apply", NS);
+        p2.add_step(StepKind::Application, "bob", "apply", NS);
+        assert_ne!(p1.steps[0].actor_hash, p2.steps[0].actor_hash);
+    }
+
+    #[test]
+    fn test_procedure_status_variants_are_distinct() {
+        let statuses = [
+            ProcedureStatus::Pending,
+            ProcedureStatus::InProgress,
+            ProcedureStatus::Approved,
+            ProcedureStatus::Rejected,
+            ProcedureStatus::Completed,
+        ];
+        for i in 0..statuses.len() {
+            for j in 0..statuses.len() {
+                if i == j {
+                    assert_eq!(statuses[i], statuses[j]);
+                } else {
+                    assert_ne!(statuses[i], statuses[j]);
+                }
+            }
+        }
+    }
 }

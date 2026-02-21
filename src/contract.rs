@@ -314,4 +314,162 @@ mod tests {
         // Meeting again returns false
         assert!(!c.meet_condition(idx));
     }
+
+    #[test]
+    fn test_content_hash_nonzero() {
+        let c = Contract::new(10, &[1, 2], 1_000_000);
+        assert_ne!(c.content_hash, 0);
+    }
+
+    #[test]
+    fn test_content_hash_deterministic_same_inputs() {
+        let c1 = Contract::new(11, &[5, 6, 7], 999_999);
+        let c2 = Contract::new(11, &[5, 6, 7], 999_999);
+        assert_eq!(c1.content_hash, c2.content_hash);
+    }
+
+    #[test]
+    fn test_content_hash_differs_for_different_parties() {
+        let c1 = Contract::new(12, &[1, 2], 0);
+        let c2 = Contract::new(12, &[3, 4], 0);
+        assert_ne!(c1.content_hash, c2.content_hash);
+    }
+
+    #[test]
+    fn test_content_hash_differs_for_different_timestamps() {
+        let c1 = Contract::new(13, &[1, 2], 0);
+        let c2 = Contract::new(13, &[1, 2], 1);
+        assert_ne!(c1.content_hash, c2.content_hash);
+    }
+
+    #[test]
+    fn test_no_parties_contract() {
+        // A zero-party contract is technically valid structurally
+        let c = Contract::new(14, &[], 0);
+        assert!(c.parties.is_empty());
+        assert_eq!(c.status, ContractStatus::Draft);
+    }
+
+    #[test]
+    fn test_single_party_contract() {
+        let c = Contract::new(15, &[99], 0);
+        assert_eq!(c.parties.len(), 1);
+        assert_eq!(c.parties[0], PartyId(99));
+    }
+
+    #[test]
+    fn test_total_obligation_zero_when_empty() {
+        let c = Contract::new(16, &[1, 2], 0);
+        assert_eq!(c.total_obligation(), 0);
+    }
+
+    #[test]
+    fn test_total_obligation_with_negative_amounts() {
+        // i128 allows negative ticks (e.g. credits/refunds)
+        let mut c = Contract::new(17, &[1, 2], 0);
+        c.add_obligation(1, 2, 1_000, 100 * NS);
+        c.add_obligation(2, 1, -500, 100 * NS);
+        assert_eq!(c.total_obligation(), 500);
+    }
+
+    #[test]
+    fn test_fulfill_obligation_invalid_index_returns_false() {
+        let mut c = Contract::new(18, &[1, 2], 0);
+        // No obligations yet
+        assert!(!c.fulfill_obligation(0));
+        assert!(!c.fulfill_obligation(usize::MAX));
+    }
+
+    #[test]
+    fn test_meet_condition_invalid_index_returns_false() {
+        let mut c = Contract::new(19, &[1, 2], 0);
+        assert!(!c.meet_condition(0));
+        assert!(!c.meet_condition(999));
+    }
+
+    #[test]
+    fn test_condition_hashes_nonzero() {
+        let mut c = Contract::new(20, &[1, 2], 0);
+        let idx = c.add_condition("payment cleared", "bank-oracle");
+        assert_ne!(c.conditions[idx].description_hash, 0);
+        assert_ne!(c.conditions[idx].evaluator_hash, 0);
+    }
+
+    #[test]
+    fn test_condition_different_descriptions_differ() {
+        let mut c = Contract::new(21, &[1, 2], 0);
+        let idx1 = c.add_condition("condition A", "oracle-X");
+        let idx2 = c.add_condition("condition B", "oracle-X");
+        assert_ne!(
+            c.conditions[idx1].description_hash,
+            c.conditions[idx2].description_hash
+        );
+    }
+
+    #[test]
+    fn test_check_status_no_obligations_stays_draft_then_active() {
+        let mut c = Contract::new(22, &[1, 2], 0);
+        // No obligations: check_status promotes Draft -> Active
+        c.check_status(0);
+        assert_eq!(c.status, ContractStatus::Active);
+    }
+
+    #[test]
+    fn test_check_status_does_not_override_terminated() {
+        let mut c = Contract::new(23, &[1, 2], 0);
+        c.add_obligation(1, 2, 100, 0); // already past due
+        c.status = ContractStatus::Terminated;
+        c.check_status(1_000 * NS); // would normally be Breached
+        assert_eq!(c.status, ContractStatus::Terminated);
+    }
+
+    #[test]
+    fn test_check_status_does_not_override_expired() {
+        let mut c = Contract::new(24, &[1, 2], 0);
+        c.add_obligation(1, 2, 100, 0);
+        c.status = ContractStatus::Expired;
+        c.check_status(1_000 * NS);
+        assert_eq!(c.status, ContractStatus::Expired);
+    }
+
+    #[test]
+    fn test_all_contract_status_variants_are_distinct() {
+        // Ensure enum variants compare correctly
+        let statuses = [
+            ContractStatus::Draft,
+            ContractStatus::Active,
+            ContractStatus::Fulfilled,
+            ContractStatus::Breached,
+            ContractStatus::Terminated,
+            ContractStatus::Expired,
+        ];
+        for i in 0..statuses.len() {
+            for j in 0..statuses.len() {
+                if i == j {
+                    assert_eq!(statuses[i], statuses[j]);
+                } else {
+                    assert_ne!(statuses[i], statuses[j]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_contract_id_and_party_id_wrap_values() {
+        let c = Contract::new(55, &[100, 200], 0);
+        assert_eq!(c.id, ContractId(55));
+        assert_eq!(c.id.0, 55);
+        assert_eq!(c.parties[0], PartyId(100));
+        assert_eq!(c.parties[0].0, 100);
+    }
+
+    #[test]
+    fn test_large_i128_obligation_does_not_overflow() {
+        let mut c = Contract::new(60, &[1, 2], 0);
+        c.add_obligation(1, 2, i128::MAX / 2, 100 * NS);
+        c.add_obligation(2, 1, i128::MAX / 2, 100 * NS);
+        // Should not panic; just check it sums
+        let total = c.total_obligation();
+        assert!(total > 0);
+    }
 }

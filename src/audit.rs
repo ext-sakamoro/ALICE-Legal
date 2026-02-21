@@ -240,4 +240,137 @@ mod tests {
         assert!(log.entries_for_entity(1).is_empty());
         assert!(log.entries_in_range(0, u64::MAX).is_empty());
     }
+
+    #[test]
+    fn test_content_hash_nonzero() {
+        let mut log = AuditLog::new();
+        log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code enacted", 0);
+        assert_ne!(log.entries[0].content_hash, 0);
+    }
+
+    #[test]
+    fn test_actor_hash_nonzero() {
+        let mut log = AuditLog::new();
+        log.append(AuditEventKind::ContractCreated, 10, "alice", "contract created", 0);
+        assert_ne!(log.entries[0].actor_hash, 0);
+    }
+
+    #[test]
+    fn test_content_hash_deterministic() {
+        let mut log1 = AuditLog::new();
+        let mut log2 = AuditLog::new();
+        log1.append(AuditEventKind::ProcedureStarted, 5, "user", "same content", 1000);
+        log2.append(AuditEventKind::ProcedureStarted, 5, "user", "same content", 1000);
+        assert_eq!(log1.entries[0].content_hash, log2.entries[0].content_hash);
+    }
+
+    #[test]
+    fn test_different_content_yields_different_hash() {
+        let mut log = AuditLog::new();
+        log.append(AuditEventKind::StatuteCreated, 1, "admin", "content A", 0);
+        log.append(AuditEventKind::StatuteCreated, 1, "admin", "content B", 0);
+        assert_ne!(log.entries[0].content_hash, log.entries[1].content_hash);
+    }
+
+    #[test]
+    fn test_sequence_starts_at_zero() {
+        let mut log = AuditLog::new();
+        let seq = log.append(AuditEventKind::StatuteCreated, 1, "admin", "first", 0);
+        assert_eq!(seq, 0);
+        assert_eq!(log.entries[0].sequence, 0);
+    }
+
+    #[test]
+    fn test_next_sequence_increments_correctly() {
+        let mut log = AuditLog::new();
+        assert_eq!(log.next_sequence, 0);
+        log.append(AuditEventKind::ContractCreated, 1, "a", "b", 0);
+        assert_eq!(log.next_sequence, 1);
+        log.append(AuditEventKind::ContractCreated, 1, "a", "b", 0);
+        assert_eq!(log.next_sequence, 2);
+    }
+
+    #[test]
+    fn test_entries_in_range_exclusive_upper_bound() {
+        let mut log = AuditLog::new();
+        log.append(AuditEventKind::StatuteCreated, 1, "a", "b", 10 * NS);
+        log.append(AuditEventKind::StatuteCreated, 2, "a", "b", 20 * NS);
+        // [10*NS, 20*NS) — only the first entry qualifies
+        let range = log.entries_in_range(10 * NS, 20 * NS);
+        assert_eq!(range.len(), 1);
+        assert_eq!(range[0].timestamp_ns, 10 * NS);
+    }
+
+    #[test]
+    fn test_entries_in_range_empty_when_no_match() {
+        let mut log = AuditLog::new();
+        log.append(AuditEventKind::StatuteCreated, 1, "a", "b", 100 * NS);
+        let range = log.entries_in_range(0, NS);
+        assert!(range.is_empty());
+    }
+
+    #[test]
+    fn test_default_equals_new() {
+        let log = AuditLog::default();
+        assert!(log.is_empty());
+        assert_eq!(log.next_sequence, 0);
+    }
+
+    #[test]
+    fn test_all_event_kinds_can_be_appended() {
+        let mut log = AuditLog::new();
+        let kinds = [
+            AuditEventKind::StatuteCreated,
+            AuditEventKind::StatuteAmended,
+            AuditEventKind::ContractCreated,
+            AuditEventKind::ContractFulfilled,
+            AuditEventKind::ContractBreached,
+            AuditEventKind::ProcedureStarted,
+            AuditEventKind::ProcedureCompleted,
+            AuditEventKind::ProcedureRejected,
+        ];
+        for (i, kind) in kinds.iter().enumerate() {
+            log.append(*kind, i as u64, "actor", "content", i as u64 * NS);
+        }
+        assert_eq!(log.len(), 8);
+        assert!(log.verify_sequence());
+    }
+
+    #[test]
+    fn test_entries_for_entity_multiple_events() {
+        let mut log = AuditLog::new();
+        let entity = 42u64;
+        log.append(AuditEventKind::ContractCreated, entity, "alice", "created", NS);
+        log.append(AuditEventKind::ContractFulfilled, entity, "alice", "fulfilled", 2 * NS);
+        log.append(AuditEventKind::ContractBreached, entity, "bob", "breached", 3 * NS);
+        // Unrelated entity
+        log.append(AuditEventKind::StatuteCreated, 99, "admin", "statute", 4 * NS);
+
+        let for_entity = log.entries_for_entity(entity);
+        assert_eq!(for_entity.len(), 3);
+        assert!(for_entity.iter().all(|e| e.entity_id == entity));
+    }
+
+    #[test]
+    fn test_audit_event_kind_variants_are_distinct() {
+        let kinds = [
+            AuditEventKind::StatuteCreated,
+            AuditEventKind::StatuteAmended,
+            AuditEventKind::ContractCreated,
+            AuditEventKind::ContractFulfilled,
+            AuditEventKind::ContractBreached,
+            AuditEventKind::ProcedureStarted,
+            AuditEventKind::ProcedureCompleted,
+            AuditEventKind::ProcedureRejected,
+        ];
+        for i in 0..kinds.len() {
+            for j in 0..kinds.len() {
+                if i == j {
+                    assert_eq!(kinds[i], kinds[j]);
+                } else {
+                    assert_ne!(kinds[i], kinds[j]);
+                }
+            }
+        }
+    }
 }

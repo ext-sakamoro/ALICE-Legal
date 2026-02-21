@@ -284,4 +284,130 @@ mod tests {
         let h3 = t3.find_clause(id3).unwrap().content_hash;
         assert_ne!(h1, h3);
     }
+
+    #[test]
+    fn test_title_hash_nonzero() {
+        let tree = StatuteTree::new(10, "Commercial Code");
+        assert_ne!(tree.title_hash, 0);
+    }
+
+    #[test]
+    fn test_different_titles_produce_different_hashes() {
+        let t1 = StatuteTree::new(11, "Civil Code");
+        let t2 = StatuteTree::new(11, "Criminal Code");
+        assert_ne!(t1.title_hash, t2.title_hash);
+    }
+
+    #[test]
+    fn test_statute_id_wraps_raw_value() {
+        let tree = StatuteTree::new(42, "Some Act");
+        assert_eq!(tree.id, StatuteId(42));
+        // StatuteId public field
+        assert_eq!(tree.id.0, 42);
+    }
+
+    #[test]
+    fn test_new_tree_starts_at_version_1() {
+        let tree = StatuteTree::new(1, "Test Act");
+        assert_eq!(tree.version, 1);
+        assert!(tree.clauses.is_empty());
+    }
+
+    #[test]
+    fn test_all_clause_kinds_can_be_added() {
+        let mut tree = StatuteTree::new(20, "Full Kind Test");
+        let kinds = [
+            ClauseKind::Obligation,
+            ClauseKind::Prohibition,
+            ClauseKind::Permission,
+            ClauseKind::Definition,
+            ClauseKind::Penalty,
+            ClauseKind::Exception,
+        ];
+        for kind in kinds {
+            let id = tree.add_clause(kind, "content", None, 0);
+            let clause = tree.find_clause(id).unwrap();
+            assert_eq!(clause.kind, kind);
+        }
+        assert_eq!(tree.clauses.len(), 6);
+    }
+
+    #[test]
+    fn test_children_of_nonexistent_parent_returns_empty() {
+        let tree = StatuteTree::new(30, "Empty Tree");
+        let children = tree.children_of(999);
+        assert!(children.is_empty());
+    }
+
+    #[test]
+    fn test_find_clause_missing_returns_none() {
+        let tree = StatuteTree::new(31, "Empty Tree");
+        assert!(tree.find_clause(0).is_none());
+        assert!(tree.find_clause(u64::MAX).is_none());
+    }
+
+    #[test]
+    fn test_obligations_empty_when_no_obligations() {
+        let mut tree = StatuteTree::new(32, "No Obligations Act");
+        tree.add_clause(ClauseKind::Prohibition, "No speeding", None, 0);
+        tree.add_clause(ClauseKind::Penalty, "Fine", None, 0);
+        assert!(tree.obligations().is_empty());
+    }
+
+    #[test]
+    fn test_is_effective_no_expiry() {
+        let mut tree = StatuteTree::new(33, "Perpetual Act");
+        let id = tree.add_clause(ClauseKind::Obligation, "Perpetual duty", None, 5 * NS);
+        // Before effective date
+        assert!(!tree.is_effective(id, 4 * NS));
+        // At and after effective date — no expiry, stays effective forever
+        assert!(tree.is_effective(id, 5 * NS));
+        assert!(tree.is_effective(id, u64::MAX));
+    }
+
+    #[test]
+    fn test_clause_ids_are_auto_incrementing_from_1() {
+        let mut tree = StatuteTree::new(34, "Sequence Test");
+        for expected in 1u64..=10 {
+            let id = tree.add_clause(ClauseKind::Permission, "allow something", None, 0);
+            assert_eq!(id, expected);
+        }
+    }
+
+    #[test]
+    fn test_content_hash_nonzero_for_all_kinds() {
+        let mut tree = StatuteTree::new(35, "Hash Nonzero Test");
+        let id = tree.add_clause(ClauseKind::Exception, "carved-out case", None, 0);
+        let clause = tree.find_clause(id).unwrap();
+        assert_ne!(clause.content_hash, 0);
+    }
+
+    #[test]
+    fn test_multi_level_parent_child_nesting() {
+        let mut tree = StatuteTree::new(40, "Nested Code");
+        let root = tree.add_clause(ClauseKind::Definition, "Chapter 1", None, 0);
+        let section = tree.add_clause(ClauseKind::Definition, "Section 1.1", Some(root), 0);
+        let leaf = tree.add_clause(ClauseKind::Obligation, "Leaf obligation", Some(section), 0);
+
+        // Root has one child: section
+        let root_children = tree.children_of(root);
+        assert_eq!(root_children.len(), 1);
+        assert_eq!(root_children[0].id, section);
+
+        // Section has one child: leaf
+        let section_children = tree.children_of(section);
+        assert_eq!(section_children.len(), 1);
+        assert_eq!(section_children[0].id, leaf);
+
+        // Leaf has no children
+        assert!(tree.children_of(leaf).is_empty());
+    }
+
+    #[test]
+    fn test_effective_from_zero_is_immediately_effective() {
+        let mut tree = StatuteTree::new(41, "Immediate Act");
+        let id = tree.add_clause(ClauseKind::Obligation, "Immediate", None, 0);
+        assert!(tree.is_effective(id, 0));
+        assert!(tree.is_effective(id, 1));
+    }
 }
