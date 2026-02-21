@@ -9,6 +9,7 @@
 //! - [`contract`] — Smart contract-like deterministic contract execution
 //! - [`procedure`] — Administrative procedures as tamper-evident event streams
 //! - [`audit`] — Immutable audit trail for all legal operations
+//! - [`hash_utils`] — Shared FNV-1a hashing utility
 //!
 //! ## Example
 //!
@@ -47,6 +48,7 @@
 
 pub mod audit;
 pub mod contract;
+pub mod hash_utils;
 pub mod procedure;
 pub mod statute;
 

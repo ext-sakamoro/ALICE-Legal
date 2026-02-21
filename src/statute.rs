@@ -3,17 +3,16 @@
 //! Statutes are compiled into a tree of [`Clause`] nodes identified by
 //! auto-incrementing IDs. Content is stored as FNV-1a hashes, keeping the
 //! structure lightweight and tamper-detectable.
+//!
+//! Two internal `HashMap` indices are maintained on every [`StatuteTree`] to
+//! replace O(n) linear scans with O(1) lookups:
+//!
+//! - `clause_index: HashMap<clause_id, Vec_index>` — used by [`find_clause`](StatuteTree::find_clause).
+//! - `children_index: HashMap<parent_id, Vec<Vec_index>>` — used by [`children_of`](StatuteTree::children_of).
 
-/// FNV-1a 64-bit hash — inline, branchless, zero allocation.
-#[inline(always)]
-fn fnv1a(data: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for &b in data {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    h
-}
+use std::collections::HashMap;
+
+use crate::hash_utils::fnv1a;
 
 /// Unique identifier for a statute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,6 +53,10 @@ pub struct Clause {
 }
 
 /// A complete statute compiled into a deterministic legal tree.
+///
+/// Internal HashMap indices keep [`find_clause`](StatuteTree::find_clause) and
+/// [`children_of`](StatuteTree::children_of) at O(1) amortised cost rather than
+/// the O(n) linear scan that a plain `Vec` would require.
 #[derive(Debug, Clone)]
 pub struct StatuteTree {
     /// The statute's unique identifier.
@@ -66,6 +69,10 @@ pub struct StatuteTree {
     pub version: u32,
     /// Internal counter for assigning clause IDs.
     next_clause_id: u64,
+    /// HashMap index: clause_id -> index into `clauses`.
+    clause_index: HashMap<u64, usize>,
+    /// HashMap index: parent_id -> list of indices into `clauses`.
+    children_index: HashMap<u64, Vec<usize>>,
 }
 
 impl StatuteTree {
@@ -82,6 +89,8 @@ impl StatuteTree {
             clauses: Vec::new(),
             version: 1,
             next_clause_id: 1,
+            clause_index: HashMap::new(),
+            children_index: HashMap::new(),
         }
     }
 
@@ -102,6 +111,7 @@ impl StatuteTree {
     ) -> u64 {
         let id = self.next_clause_id;
         self.next_clause_id += 1;
+        let vec_idx = self.clauses.len();
         self.clauses.push(Clause {
             id,
             kind,
@@ -110,20 +120,35 @@ impl StatuteTree {
             effective_from_ns,
             expires_ns: None,
         });
+        // Update the clause_id -> Vec index map.
+        self.clause_index.insert(id, vec_idx);
+        // Update the parent_id -> children map.
+        if let Some(pid) = parent_id {
+            self.children_index
+                .entry(pid)
+                .or_insert_with(Vec::new)
+                .push(vec_idx);
+        }
         id
     }
 
     /// Find a clause by its id.
+    ///
+    /// Uses the internal HashMap index for O(1) lookup instead of an O(n)
+    /// linear scan.
     pub fn find_clause(&self, id: u64) -> Option<&Clause> {
-        self.clauses.iter().find(|c| c.id == id)
+        self.clause_index.get(&id).map(|&i| &self.clauses[i])
     }
 
     /// Return all direct children of a given parent clause id.
+    ///
+    /// Uses the internal HashMap index for O(1) lookup instead of an O(n)
+    /// linear scan.
     pub fn children_of(&self, parent_id: u64) -> Vec<&Clause> {
-        self.clauses
-            .iter()
-            .filter(|c| c.parent_id == Some(parent_id))
-            .collect()
+        match self.children_index.get(&parent_id) {
+            None => Vec::new(),
+            Some(indices) => indices.iter().map(|&i| &self.clauses[i]).collect(),
+        }
     }
 
     /// Return all clauses of kind [`ClauseKind::Obligation`].

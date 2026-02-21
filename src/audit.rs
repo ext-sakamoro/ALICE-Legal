@@ -5,16 +5,9 @@
 //! [`AuditLog::append`]. The log is append-only and exposes read-only query
 //! helpers for compliance reporting.
 
-/// FNV-1a 64-bit hash — inline, branchless, zero allocation.
-#[inline(always)]
-fn fnv1a(data: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
-    for &b in data {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    h
-}
+use std::collections::HashMap;
+
+use crate::hash_utils::fnv1a;
 
 /// The category of legal event recorded in the audit log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,12 +48,18 @@ pub struct AuditEntry {
 }
 
 /// Append-only, sequenced audit log for all legal operations.
+///
+/// An internal `HashMap<entity_id, Vec<index>>` index makes
+/// [`entries_for_entity`](AuditLog::entries_for_entity) an O(1) lookup
+/// instead of an O(n) linear scan.
 #[derive(Debug, Clone)]
 pub struct AuditLog {
     /// All recorded entries in append order.
     pub entries: Vec<AuditEntry>,
     /// The sequence number that will be assigned to the next entry.
     pub next_sequence: u64,
+    /// HashMap index: entity_id -> list of indices into `entries`.
+    entity_index: HashMap<u64, Vec<usize>>,
 }
 
 impl AuditLog {
@@ -69,6 +68,7 @@ impl AuditLog {
         Self {
             entries: Vec::new(),
             next_sequence: 0,
+            entity_index: HashMap::new(),
         }
     }
 
@@ -91,6 +91,7 @@ impl AuditLog {
     ) -> u64 {
         let seq = self.next_sequence;
         self.next_sequence += 1;
+        let idx = self.entries.len();
         self.entries.push(AuditEntry {
             sequence: seq,
             kind,
@@ -99,15 +100,23 @@ impl AuditLog {
             timestamp_ns,
             content_hash: fnv1a(content.as_bytes()),
         });
+        // Update the O(1) entity index.
+        self.entity_index
+            .entry(entity_id)
+            .or_insert_with(Vec::new)
+            .push(idx);
         seq
     }
 
     /// Return all entries that relate to a specific entity id.
+    ///
+    /// Uses the internal HashMap index for O(1) lookup instead of an O(n)
+    /// linear scan.
     pub fn entries_for_entity(&self, entity_id: u64) -> Vec<&AuditEntry> {
-        self.entries
-            .iter()
-            .filter(|e| e.entity_id == entity_id)
-            .collect()
+        match self.entity_index.get(&entity_id) {
+            None => Vec::new(),
+            Some(indices) => indices.iter().map(|&i| &self.entries[i]).collect(),
+        }
     }
 
     /// Return all entries whose timestamp falls within `[from_ns, to_ns)`.
