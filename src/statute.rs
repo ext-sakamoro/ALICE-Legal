@@ -124,10 +124,7 @@ impl StatuteTree {
         self.clause_index.insert(id, vec_idx);
         // Update the parent_id -> children map.
         if let Some(pid) = parent_id {
-            self.children_index
-                .entry(pid)
-                .or_insert_with(Vec::new)
-                .push(vec_idx);
+            self.children_index.entry(pid).or_default().push(vec_idx);
         }
         id
     }
@@ -233,7 +230,12 @@ mod tests {
         tree.add_clause(ClauseKind::Prohibition, "Do not steal", None, 0);
         tree.add_clause(ClauseKind::Obligation, "Appear in court", None, 0);
         tree.add_clause(ClauseKind::Penalty, "Fine for theft", None, 0);
-        tree.add_clause(ClauseKind::Obligation, "Pay penalty within 30 days", None, 0);
+        tree.add_clause(
+            ClauseKind::Obligation,
+            "Pay penalty within 30 days",
+            None,
+            0,
+        );
 
         let obs = tree.obligations();
         assert_eq!(obs.len(), 3);

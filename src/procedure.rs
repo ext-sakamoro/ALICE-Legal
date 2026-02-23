@@ -96,13 +96,7 @@ impl Procedure {
     /// - [`StepKind::Rejection`] → [`ProcedureStatus::Rejected`]
     /// - [`StepKind::Completion`] → [`ProcedureStatus::Completed`]
     /// - Other kinds → [`ProcedureStatus::InProgress`] (unless already terminal)
-    pub fn add_step(
-        &mut self,
-        kind: StepKind,
-        actor: &str,
-        content: &str,
-        timestamp_ns: u64,
-    ) {
+    pub fn add_step(&mut self, kind: StepKind, actor: &str, content: &str, timestamp_ns: u64) {
         let sequence = self.steps.len() as u32;
         let content_hash = fnv1a(content.as_bytes());
         let actor_hash = fnv1a(actor.as_bytes());
@@ -171,7 +165,12 @@ impl Procedure {
     /// Append a [`StepKind::Completion`] step and set status to
     /// [`ProcedureStatus::Completed`].
     pub fn complete(&mut self, actor: &str, timestamp_ns: u64) {
-        self.add_step(StepKind::Completion, actor, "procedure-completed", timestamp_ns);
+        self.add_step(
+            StepKind::Completion,
+            actor,
+            "procedure-completed",
+            timestamp_ns,
+        );
     }
 
     /// Append a [`StepKind::Rejection`] step with a reason payload and set
@@ -193,8 +192,18 @@ mod tests {
         assert_eq!(proc.status, ProcedureStatus::Pending);
         assert!(proc.steps.is_empty());
 
-        proc.add_step(StepKind::Application, "citizen-001", "initial permit application", NS);
-        proc.add_step(StepKind::Review, "officer-042", "documents reviewed", 2 * NS);
+        proc.add_step(
+            StepKind::Application,
+            "citizen-001",
+            "initial permit application",
+            NS,
+        );
+        proc.add_step(
+            StepKind::Review,
+            "officer-042",
+            "documents reviewed",
+            2 * NS,
+        );
 
         assert_eq!(proc.steps.len(), 2);
         assert_eq!(proc.steps[0].sequence, 0);
@@ -292,7 +301,12 @@ mod tests {
     fn test_sequence_numbers_increment_from_zero() {
         let mut proc = Procedure::new(13);
         for expected_seq in 0u32..5 {
-            proc.add_step(StepKind::Amendment, "clerk", "amendment", NS * expected_seq as u64);
+            proc.add_step(
+                StepKind::Amendment,
+                "clerk",
+                "amendment",
+                NS * expected_seq as u64,
+            );
             assert_eq!(proc.steps.last().unwrap().sequence, expected_seq);
         }
     }

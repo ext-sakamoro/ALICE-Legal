@@ -53,6 +53,8 @@ pub mod procedure;
 pub mod statute;
 
 pub use audit::{AuditEntry, AuditEventKind, AuditLog};
-pub use contract::{Contract, ContractId, ContractStatus, Obligation as ContractObligation, PartyId};
+pub use contract::{
+    Contract, ContractId, ContractStatus, Obligation as ContractObligation, PartyId,
+};
 pub use procedure::{Procedure, ProcedureId, ProcedureStatus, ProcedureStep, StepKind};
 pub use statute::{Clause, ClauseKind, StatuteId, StatuteTree};

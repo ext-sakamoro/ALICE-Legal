@@ -192,9 +192,10 @@ impl Contract {
         }
 
         // Priority 1: Breached
-        let any_breached = self.obligations.iter().any(|ob| {
-            !ob.fulfilled && now_ns > ob.due_ns
-        });
+        let any_breached = self
+            .obligations
+            .iter()
+            .any(|ob| !ob.fulfilled && now_ns > ob.due_ns);
         if any_breached {
             self.status = ContractStatus::Breached;
             return;
@@ -270,7 +271,7 @@ mod tests {
     fn test_status_becomes_breached_when_obligation_past_due() {
         let mut c = Contract::new(4, &[1, 2], 0);
         c.add_obligation(1, 2, 999, 10 * NS); // due at 10s
-        // Not fulfilled, check at 11s
+                                              // Not fulfilled, check at 11s
         c.check_status(11 * NS);
         assert_eq!(c.status, ContractStatus::Breached);
     }

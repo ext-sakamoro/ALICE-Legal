@@ -101,10 +101,7 @@ impl AuditLog {
             content_hash: fnv1a(content.as_bytes()),
         });
         // Update the O(1) entity index.
-        self.entity_index
-            .entry(entity_id)
-            .or_insert_with(Vec::new)
-            .push(idx);
+        self.entity_index.entry(entity_id).or_default().push(idx);
         seq
     }
 
@@ -167,8 +164,20 @@ mod tests {
     fn test_append_entries_and_verify_sequence() {
         let mut log = AuditLog::new();
         let s0 = log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code", 0);
-        let s1 = log.append(AuditEventKind::ContractCreated, 100, "alice", "sales contract", NS);
-        let s2 = log.append(AuditEventKind::ProcedureStarted, 42, "bob", "permit application", 2 * NS);
+        let s1 = log.append(
+            AuditEventKind::ContractCreated,
+            100,
+            "alice",
+            "sales contract",
+            NS,
+        );
+        let s2 = log.append(
+            AuditEventKind::ProcedureStarted,
+            42,
+            "bob",
+            "permit application",
+            2 * NS,
+        );
 
         assert_eq!(s0, 0);
         assert_eq!(s1, 1);
@@ -181,9 +190,27 @@ mod tests {
     fn test_filter_by_entity_id() {
         let mut log = AuditLog::new();
         log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code", 0);
-        log.append(AuditEventKind::ContractCreated, 100, "alice", "contract A", NS);
-        log.append(AuditEventKind::ContractFulfilled, 100, "alice", "contract A fulfilled", 2 * NS);
-        log.append(AuditEventKind::ProcedureStarted, 200, "bob", "procedure B", 3 * NS);
+        log.append(
+            AuditEventKind::ContractCreated,
+            100,
+            "alice",
+            "contract A",
+            NS,
+        );
+        log.append(
+            AuditEventKind::ContractFulfilled,
+            100,
+            "alice",
+            "contract A fulfilled",
+            2 * NS,
+        );
+        log.append(
+            AuditEventKind::ProcedureStarted,
+            200,
+            "bob",
+            "procedure B",
+            3 * NS,
+        );
 
         let for_100 = log.entries_for_entity(100);
         assert_eq!(for_100.len(), 2);
@@ -213,7 +240,9 @@ mod tests {
         // Range [5s, 15s) should capture events at 5s and 10s
         let range = log.entries_in_range(5 * NS, 15 * NS);
         assert_eq!(range.len(), 2);
-        assert!(range.iter().all(|e| e.timestamp_ns >= 5 * NS && e.timestamp_ns < 15 * NS));
+        assert!(range
+            .iter()
+            .all(|e| e.timestamp_ns >= 5 * NS && e.timestamp_ns < 15 * NS));
     }
 
     #[test]
@@ -244,14 +273,26 @@ mod tests {
     #[test]
     fn test_content_hash_nonzero() {
         let mut log = AuditLog::new();
-        log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code enacted", 0);
+        log.append(
+            AuditEventKind::StatuteCreated,
+            1,
+            "admin",
+            "Civil Code enacted",
+            0,
+        );
         assert_ne!(log.entries[0].content_hash, 0);
     }
 
     #[test]
     fn test_actor_hash_nonzero() {
         let mut log = AuditLog::new();
-        log.append(AuditEventKind::ContractCreated, 10, "alice", "contract created", 0);
+        log.append(
+            AuditEventKind::ContractCreated,
+            10,
+            "alice",
+            "contract created",
+            0,
+        );
         assert_ne!(log.entries[0].actor_hash, 0);
     }
 
@@ -259,8 +300,20 @@ mod tests {
     fn test_content_hash_deterministic() {
         let mut log1 = AuditLog::new();
         let mut log2 = AuditLog::new();
-        log1.append(AuditEventKind::ProcedureStarted, 5, "user", "same content", 1000);
-        log2.append(AuditEventKind::ProcedureStarted, 5, "user", "same content", 1000);
+        log1.append(
+            AuditEventKind::ProcedureStarted,
+            5,
+            "user",
+            "same content",
+            1000,
+        );
+        log2.append(
+            AuditEventKind::ProcedureStarted,
+            5,
+            "user",
+            "same content",
+            1000,
+        );
         assert_eq!(log1.entries[0].content_hash, log2.entries[0].content_hash);
     }
 
@@ -340,11 +393,35 @@ mod tests {
     fn test_entries_for_entity_multiple_events() {
         let mut log = AuditLog::new();
         let entity = 42u64;
-        log.append(AuditEventKind::ContractCreated, entity, "alice", "created", NS);
-        log.append(AuditEventKind::ContractFulfilled, entity, "alice", "fulfilled", 2 * NS);
-        log.append(AuditEventKind::ContractBreached, entity, "bob", "breached", 3 * NS);
+        log.append(
+            AuditEventKind::ContractCreated,
+            entity,
+            "alice",
+            "created",
+            NS,
+        );
+        log.append(
+            AuditEventKind::ContractFulfilled,
+            entity,
+            "alice",
+            "fulfilled",
+            2 * NS,
+        );
+        log.append(
+            AuditEventKind::ContractBreached,
+            entity,
+            "bob",
+            "breached",
+            3 * NS,
+        );
         // Unrelated entity
-        log.append(AuditEventKind::StatuteCreated, 99, "admin", "statute", 4 * NS);
+        log.append(
+            AuditEventKind::StatuteCreated,
+            99,
+            "admin",
+            "statute",
+            4 * NS,
+        );
 
         let for_entity = log.entries_for_entity(entity);
         assert_eq!(for_entity.len(), 3);
