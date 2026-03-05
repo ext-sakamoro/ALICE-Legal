@@ -1,3 +1,9 @@
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+
 //! # ALICE-Legal
 //!
 //! Deterministic legal tree compilation, contract execution, and
@@ -48,6 +54,8 @@
 
 pub mod audit;
 pub mod contract;
+#[cfg(feature = "ffi")]
+pub mod ffi;
 pub mod hash_utils;
 pub mod procedure;
 pub mod statute;

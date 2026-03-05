@@ -83,6 +83,7 @@ impl Contract {
     /// * `id` — Numeric contract identifier.
     /// * `parties` — Slice of party numeric IDs.
     /// * `created_ns` — Creation timestamp in Unix nanoseconds.
+    #[must_use]
     pub fn new(id: u64, parties: &[u64], created_ns: u64) -> Self {
         // Deterministic hash: party IDs concatenated as bytes + created_ns bytes
         let mut hash_input = Vec::with_capacity(parties.len() * 8 + 8);
@@ -214,11 +215,13 @@ impl Contract {
     }
 
     /// Sum of all obligation amounts in fixed-point ticks.
+    #[must_use]
     pub fn total_obligation(&self) -> i128 {
         self.obligations.iter().map(|ob| ob.amount_ticks).sum()
     }
 
     /// Number of obligations that have not yet been fulfilled.
+    #[must_use]
     pub fn unfulfilled_count(&self) -> usize {
         self.obligations.iter().filter(|ob| !ob.fulfilled).count()
     }

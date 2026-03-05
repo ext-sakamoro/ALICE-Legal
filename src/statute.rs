@@ -54,7 +54,7 @@ pub struct Clause {
 
 /// A complete statute compiled into a deterministic legal tree.
 ///
-/// Internal HashMap indices keep [`find_clause`](StatuteTree::find_clause) and
+/// Internal `HashMap` indices keep [`find_clause`](StatuteTree::find_clause) and
 /// [`children_of`](StatuteTree::children_of) at O(1) amortised cost rather than
 /// the O(n) linear scan that a plain `Vec` would require.
 #[derive(Debug, Clone)]
@@ -69,9 +69,9 @@ pub struct StatuteTree {
     pub version: u32,
     /// Internal counter for assigning clause IDs.
     next_clause_id: u64,
-    /// HashMap index: clause_id -> index into `clauses`.
+    /// `HashMap` index: `clause_id` -> index into `clauses`.
     clause_index: HashMap<u64, usize>,
-    /// HashMap index: parent_id -> list of indices into `clauses`.
+    /// `HashMap` index: `parent_id` -> list of indices into `clauses`.
     children_index: HashMap<u64, Vec<usize>>,
 }
 
@@ -82,6 +82,7 @@ impl StatuteTree {
     ///
     /// * `id` — Numeric statute identifier.
     /// * `title` — Human-readable title; stored as FNV-1a hash.
+    #[must_use]
     pub fn new(id: u64, title: &str) -> Self {
         Self {
             id: StatuteId(id),
@@ -131,16 +132,18 @@ impl StatuteTree {
 
     /// Find a clause by its id.
     ///
-    /// Uses the internal HashMap index for O(1) lookup instead of an O(n)
+    /// Uses the internal `HashMap` index for O(1) lookup instead of an O(n)
     /// linear scan.
+    #[must_use]
     pub fn find_clause(&self, id: u64) -> Option<&Clause> {
         self.clause_index.get(&id).map(|&i| &self.clauses[i])
     }
 
     /// Return all direct children of a given parent clause id.
     ///
-    /// Uses the internal HashMap index for O(1) lookup instead of an O(n)
+    /// Uses the internal `HashMap` index for O(1) lookup instead of an O(n)
     /// linear scan.
+    #[must_use]
     pub fn children_of(&self, parent_id: u64) -> Vec<&Clause> {
         match self.children_index.get(&parent_id) {
             None => Vec::new(),
@@ -149,6 +152,7 @@ impl StatuteTree {
     }
 
     /// Return all clauses of kind [`ClauseKind::Obligation`].
+    #[must_use]
     pub fn obligations(&self) -> Vec<&Clause> {
         self.clauses
             .iter()
@@ -160,6 +164,7 @@ impl StatuteTree {
     ///
     /// Returns `false` if the clause does not exist, has not yet taken effect,
     /// or has already expired.
+    #[must_use]
     pub fn is_effective(&self, clause_id: u64, at_ns: u64) -> bool {
         match self.find_clause(clause_id) {
             None => false,

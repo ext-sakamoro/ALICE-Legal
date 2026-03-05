@@ -12,6 +12,12 @@ repository = "https://github.com/ext-sakamoro/ALICE-Legal"
 [lib]
 name = "alice_legal"
 path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = ["std"]
+std = []
+ffi = ["std"]
 
 [profile.release]
 opt-level = 3

@@ -58,12 +58,13 @@ pub struct AuditLog {
     pub entries: Vec<AuditEntry>,
     /// The sequence number that will be assigned to the next entry.
     pub next_sequence: u64,
-    /// HashMap index: entity_id -> list of indices into `entries`.
+    /// `HashMap` index: `entity_id` -> list of indices into `entries`.
     entity_index: HashMap<u64, Vec<usize>>,
 }
 
 impl AuditLog {
     /// Create an empty audit log.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -107,8 +108,9 @@ impl AuditLog {
 
     /// Return all entries that relate to a specific entity id.
     ///
-    /// Uses the internal HashMap index for O(1) lookup instead of an O(n)
+    /// Uses the internal `HashMap` index for O(1) lookup instead of an O(n)
     /// linear scan.
+    #[must_use]
     pub fn entries_for_entity(&self, entity_id: u64) -> Vec<&AuditEntry> {
         match self.entity_index.get(&entity_id) {
             None => Vec::new(),
@@ -117,6 +119,7 @@ impl AuditLog {
     }
 
     /// Return all entries whose timestamp falls within `[from_ns, to_ns)`.
+    #[must_use]
     pub fn entries_in_range(&self, from_ns: u64, to_ns: u64) -> Vec<&AuditEntry> {
         self.entries
             .iter()
@@ -125,11 +128,13 @@ impl AuditLog {
     }
 
     /// Total number of entries in the log.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Returns `true` if the log contains no entries.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -138,6 +143,7 @@ impl AuditLog {
     ///
     /// Returns `true` for an empty log or a log whose entries are numbered
     /// `0, 1, 2, …, n-1` in order.
+    #[must_use]
     pub fn verify_sequence(&self) -> bool {
         for (i, entry) in self.entries.iter().enumerate() {
             if entry.sequence != i as u64 {

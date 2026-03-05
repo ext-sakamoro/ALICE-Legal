@@ -8,12 +8,13 @@
 ///
 /// Uses the standard FNV offset basis `0xcbf29ce484222325` and prime
 /// `0x100000001b3`.
-#[inline(always)]
+#[inline]
+#[must_use]
 pub fn fnv1a(data: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in data {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
     }
     h
 }

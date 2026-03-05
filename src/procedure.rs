@@ -77,6 +77,7 @@ pub struct Procedure {
 
 impl Procedure {
     /// Create a new, empty procedure in [`ProcedureStatus::Pending`] state.
+    #[must_use]
     pub fn new(id: u64) -> Self {
         Self {
             id: ProcedureId(id),
@@ -139,6 +140,7 @@ impl Procedure {
     ///
     /// Returns `true` if every step's `prev_hash` matches the hash recomputed
     /// from the previous step's `content_hash` and `prev_hash`.
+    #[must_use]
     pub fn verify_chain(&self) -> bool {
         for i in 1..self.steps.len() {
             let prev = &self.steps[i - 1];
@@ -158,6 +160,7 @@ impl Procedure {
 
     /// Return a reference to the most recently recorded step, or `None` if
     /// the procedure has no steps yet.
+    #[must_use]
     pub fn latest_step(&self) -> Option<&ProcedureStep> {
         self.steps.last()
     }
