@@ -476,4 +476,45 @@ mod tests {
         let total = c.total_obligation();
         assert!(total > 0);
     }
+
+    // --- 追加テスト ---
+
+    /// 一部の義務が履行済みでも未履行が残る場合、`check_status` は `Active` のまま。
+    #[test]
+    fn test_check_status_partial_fulfillment_stays_active() {
+        let mut c = Contract::new(70, &[1, 2], 0);
+        let i1 = c.add_obligation(1, 2, 100, 100 * NS);
+        let _i2 = c.add_obligation(2, 1, 200, 100 * NS);
+
+        c.fulfill_obligation(i1);
+        // _i2 はまだ未履行で `due_ns` も未来なので `Breached` にはならない
+        c.check_status(50 * NS);
+        // `Draft` → `Active` に昇格し、`Fulfilled` にも `Breached` にもならないこと
+        assert_eq!(c.status, ContractStatus::Active);
+        assert_eq!(c.unfulfilled_count(), 1);
+    }
+
+    /// `due_ns` ちょうどの時刻では `Breached` にならない（`>` の境界確認）。
+    #[test]
+    fn test_check_status_exactly_at_due_ns_not_breached() {
+        let mut c = Contract::new(71, &[1, 2], 0);
+        c.add_obligation(1, 2, 500, 10 * NS);
+        // `now_ns == due_ns` は strictly greater than ではないので `Breached` にならない
+        c.check_status(10 * NS);
+        assert_ne!(c.status, ContractStatus::Breached);
+        // `now_ns` が 1ns 超えると `Breached` になる
+        c.check_status(10 * NS + 1);
+        assert_eq!(c.status, ContractStatus::Breached);
+    }
+
+    /// `add_obligation` が返すインデックスは 0-based で連続していること。
+    #[test]
+    fn test_add_obligation_returns_correct_indices() {
+        let mut c = Contract::new(72, &[1, 2, 3], 0);
+        for expected_idx in 0usize..5 {
+            let idx = c.add_obligation(1, 2, 100, 100 * NS);
+            assert_eq!(idx, expected_idx);
+        }
+        assert_eq!(c.obligations.len(), 5);
+    }
 }

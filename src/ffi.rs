@@ -597,4 +597,110 @@ mod tests {
             alice_audit_destroy(log);
         }
     }
+
+    #[test]
+    fn test_statute_empty_title_is_accepted() {
+        // タイトルが空文字列（len=0）でも StatuteTree が正常に生成される
+        unsafe {
+            let tree = alice_statute_new(99, ptr::null(), 0);
+            assert!(!tree.is_null());
+            assert_eq!(alice_statute_obligations_count(tree), 0);
+            alice_statute_destroy(tree);
+        }
+    }
+
+    #[test]
+    fn test_contract_with_zero_parties_is_accepted() {
+        // parties_len=0 の Contract でも正常に生成される
+        unsafe {
+            let contract = alice_contract_new(200, ptr::null(), 0, 0);
+            assert!(!contract.is_null());
+            assert_eq!(alice_contract_unfulfilled_count(contract), 0);
+            alice_contract_destroy(contract);
+        }
+    }
+
+    #[test]
+    fn test_procedure_multiple_steps_chain_valid() {
+        // 複数ステップ追加後もハッシュチェーンが有効であること
+        unsafe {
+            let proc = alice_procedure_new(77);
+            let steps: &[(&[u8], &[u8], u8, u64)] = &[
+                (b"citizen", b"apply", 0, 1_000_000_000),
+                (b"officer", b"review", 1, 2_000_000_000),
+                (b"manager", b"approve", 2, 3_000_000_000),
+                (b"system", b"complete", 6, 4_000_000_000),
+            ];
+            for (actor, content, kind, ts) in steps {
+                alice_procedure_add_step(
+                    proc,
+                    *kind,
+                    actor.as_ptr(),
+                    actor.len() as u32,
+                    content.as_ptr(),
+                    content.len() as u32,
+                    *ts,
+                );
+            }
+            assert_eq!(alice_procedure_step_count(proc), 4);
+            assert_eq!(alice_procedure_verify_chain(proc), 1);
+            alice_procedure_destroy(proc);
+        }
+    }
+
+    #[test]
+    fn test_audit_all_valid_kinds_accepted() {
+        // kind=0..=7 がすべて u64::MAX 以外のシーケンス番号を返すこと
+        unsafe {
+            let log = alice_audit_new();
+            let actor = b"admin";
+            let content = b"event";
+            for kind in 0u8..=7 {
+                let seq = alice_audit_append(
+                    log,
+                    kind,
+                    kind as u64,
+                    actor.as_ptr(),
+                    actor.len() as u32,
+                    content.as_ptr(),
+                    content.len() as u32,
+                    kind as u64 * 1_000_000_000,
+                );
+                assert_ne!(
+                    seq,
+                    u64::MAX,
+                    "kind={kind} は有効なはずだが u64::MAX が返った"
+                );
+            }
+            assert_eq!(alice_audit_len(log), 8);
+            alice_audit_destroy(log);
+        }
+    }
+
+    #[test]
+    fn test_fulfill_out_of_range_obligation_returns_zero() {
+        // 存在しないインデックスへの fulfill は 0 を返すこと
+        unsafe {
+            let parties = [1u64, 2];
+            let contract = alice_contract_new(300, parties.as_ptr(), 2, 0);
+            // 債務なし → index=0 は範囲外
+            let ok = alice_contract_fulfill_obligation(contract, 0);
+            assert_eq!(ok, 0);
+            alice_contract_destroy(contract);
+        }
+    }
+
+    #[test]
+    fn test_contract_total_obligation_multiple() {
+        // 複数債務の合計が正しく加算されること
+        unsafe {
+            let parties = [10u64, 20];
+            let contract = alice_contract_new(400, parties.as_ptr(), 2, 0);
+            alice_contract_add_obligation(contract, 10, 20, 1000, 9_000_000_000);
+            alice_contract_add_obligation(contract, 10, 20, 2500, 9_000_000_000);
+            alice_contract_add_obligation(contract, 20, 10, 500, 9_000_000_000);
+            assert_eq!(alice_contract_total_obligation_i64(contract), 4000);
+            alice_contract_destroy(contract);
+        }
+    }
 }

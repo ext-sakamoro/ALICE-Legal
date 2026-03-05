@@ -145,10 +145,11 @@ impl StatuteTree {
     /// linear scan.
     #[must_use]
     pub fn children_of(&self, parent_id: u64) -> Vec<&Clause> {
-        match self.children_index.get(&parent_id) {
-            None => Vec::new(),
-            Some(indices) => indices.iter().map(|&i| &self.clauses[i]).collect(),
-        }
+        self.children_index
+            .get(&parent_id)
+            .map_or_else(Vec::new, |indices| {
+                indices.iter().map(|&i| &self.clauses[i]).collect()
+            })
     }
 
     /// Return all clauses of kind [`ClauseKind::Obligation`].
@@ -416,5 +417,57 @@ mod tests {
         let id = tree.add_clause(ClauseKind::Obligation, "Immediate", None, 0);
         assert!(tree.is_effective(id, 0));
         assert!(tree.is_effective(id, 1));
+    }
+
+    // --- 追加テスト ---
+
+    /// `clone` した `StatuteTree` は元と独立した構造体であること。
+    #[test]
+    fn test_clone_is_independent() {
+        let mut original = StatuteTree::new(50, "Clone Test");
+        original.add_clause(ClauseKind::Obligation, "original clause", None, 0);
+
+        let mut cloned = original.clone();
+        // クローンに追加しても元は変わらない
+        cloned.add_clause(ClauseKind::Prohibition, "clone only", None, 0);
+
+        assert_eq!(original.clauses.len(), 1);
+        assert_eq!(cloned.clauses.len(), 2);
+    }
+
+    /// 複数の親が独立した `children_of` 結果を持つこと。
+    #[test]
+    fn test_multiple_parents_have_independent_children() {
+        let mut tree = StatuteTree::new(51, "Multi-Parent Act");
+        let par_a = tree.add_clause(ClauseKind::Definition, "Part A", None, 0);
+        let par_b = tree.add_clause(ClauseKind::Definition, "Part B", None, 0);
+
+        let obligation_one = tree.add_clause(ClauseKind::Obligation, "A-1", Some(par_a), 0);
+        let obligation_two = tree.add_clause(ClauseKind::Obligation, "A-2", Some(par_a), 0);
+        let prohibition_one = tree.add_clause(ClauseKind::Prohibition, "B-1", Some(par_b), 0);
+
+        let kids_a = tree.children_of(par_a);
+        assert_eq!(kids_a.len(), 2);
+        let ids_a: Vec<u64> = kids_a.iter().map(|c| c.id).collect();
+        assert!(ids_a.contains(&obligation_one));
+        assert!(ids_a.contains(&obligation_two));
+
+        let kids_b = tree.children_of(par_b);
+        assert_eq!(kids_b.len(), 1);
+        assert_eq!(kids_b[0].id, prohibition_one);
+    }
+
+    /// `expires_ns` が `None` のとき、`effective_from_ns` ちょうどから有効になること。
+    #[test]
+    fn test_is_effective_boundary_at_effective_from_ns() {
+        let mut tree = StatuteTree::new(52, "Boundary Act");
+        let effective_at = 7 * NS;
+        let id = tree.add_clause(ClauseKind::Permission, "boundary test", None, effective_at);
+        // 1ns 前は無効
+        assert!(!tree.is_effective(id, effective_at - 1));
+        // ちょうど有効開始時刻は有効
+        assert!(tree.is_effective(id, effective_at));
+        // その後も有効
+        assert!(tree.is_effective(id, effective_at + 1_000_000));
     }
 }

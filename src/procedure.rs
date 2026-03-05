@@ -78,7 +78,7 @@ pub struct Procedure {
 impl Procedure {
     /// Create a new, empty procedure in [`ProcedureStatus::Pending`] state.
     #[must_use]
-    pub fn new(id: u64) -> Self {
+    pub const fn new(id: u64) -> Self {
         Self {
             id: ProcedureId(id),
             steps: Vec::new(),
@@ -102,15 +102,12 @@ impl Procedure {
         let content_hash = fnv1a(content.as_bytes());
         let actor_hash = fnv1a(actor.as_bytes());
 
-        let prev_hash = match self.steps.last() {
-            None => 0u64,
-            Some(prev) => {
-                let mut buf = [0u8; 16];
-                buf[..8].copy_from_slice(&prev.content_hash.to_le_bytes());
-                buf[8..].copy_from_slice(&prev.prev_hash.to_le_bytes());
-                fnv1a(&buf)
-            }
-        };
+        let prev_hash = self.steps.last().map_or(0u64, |prev| {
+            let mut buf = [0u8; 16];
+            buf[..8].copy_from_slice(&prev.content_hash.to_le_bytes());
+            buf[8..].copy_from_slice(&prev.prev_hash.to_le_bytes());
+            fnv1a(&buf)
+        });
 
         self.steps.push(ProcedureStep {
             sequence,
@@ -308,7 +305,7 @@ mod tests {
                 StepKind::Amendment,
                 "clerk",
                 "amendment",
-                NS * expected_seq as u64,
+                NS * u64::from(expected_seq),
             );
             assert_eq!(proc.steps.last().unwrap().sequence, expected_seq);
         }

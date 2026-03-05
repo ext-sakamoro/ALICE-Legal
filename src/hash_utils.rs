@@ -25,13 +25,13 @@ mod tests {
 
     #[test]
     fn test_empty_input_returns_offset_basis() {
-        assert_eq!(fnv1a(b""), 0xcbf29ce484222325);
+        assert_eq!(fnv1a(b""), 0xcbf2_9ce4_8422_2325);
     }
 
     #[test]
     fn test_known_hash_value() {
         // FNV-1a("hello") = 0xa430d84680aabd0b (well-known test vector)
-        assert_eq!(fnv1a(b"hello"), 0xa430d84680aabd0b);
+        assert_eq!(fnv1a(b"hello"), 0xa430_d846_80aa_bd0b);
     }
 
     #[test]
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn test_hash_nonzero_for_common_strings() {
         for s in &["contract", "statute", "procedure", "audit", "obligation"] {
-            assert_ne!(fnv1a(s.as_bytes()), 0, "hash of '{}' must be nonzero", s);
+            assert_ne!(fnv1a(s.as_bytes()), 0, "hash of '{s}' must be nonzero");
         }
     }
 

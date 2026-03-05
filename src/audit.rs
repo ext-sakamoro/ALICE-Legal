@@ -112,10 +112,11 @@ impl AuditLog {
     /// linear scan.
     #[must_use]
     pub fn entries_for_entity(&self, entity_id: u64) -> Vec<&AuditEntry> {
-        match self.entity_index.get(&entity_id) {
-            None => Vec::new(),
-            Some(indices) => indices.iter().map(|&i| &self.entries[i]).collect(),
-        }
+        self.entity_index
+            .get(&entity_id)
+            .map_or_else(Vec::new, |indices| {
+                indices.iter().map(|&i| &self.entries[i]).collect()
+            })
     }
 
     /// Return all entries whose timestamp falls within `[from_ns, to_ns)`.
@@ -129,13 +130,13 @@ impl AuditLog {
 
     /// Total number of entries in the log.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Returns `true` if the log contains no entries.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
@@ -455,5 +456,57 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_entries_in_range_zero_width_and_inverted() {
+        // from_ns == to_ns は空範囲（下限と上限が等しい）
+        let mut log = AuditLog::new();
+        log.append(AuditEventKind::StatuteCreated, 1, "admin", "event", 10 * NS);
+        let empty = log.entries_in_range(10 * NS, 10 * NS);
+        assert!(empty.is_empty(), "from==to は空範囲のはず");
+
+        // from_ns > to_ns も空を返すこと（フィルタが両条件を同時に満たせない）
+        let also_empty = log.entries_in_range(20 * NS, 5 * NS);
+        assert!(also_empty.is_empty(), "from>to は空範囲のはず");
+    }
+
+    #[test]
+    fn test_clone_produces_independent_copy() {
+        // clone したログへの追記が元ログに影響しないこと
+        let mut original = AuditLog::new();
+        original.append(AuditEventKind::ContractCreated, 1, "alice", "original", NS);
+
+        let mut cloned = original.clone();
+        cloned.append(
+            AuditEventKind::ContractFulfilled,
+            1,
+            "alice",
+            "clone-only",
+            2 * NS,
+        );
+
+        assert_eq!(original.len(), 1, "元ログは変化しないこと");
+        assert_eq!(cloned.len(), 2, "クローンは追記されていること");
+        assert!(original.verify_sequence());
+        assert!(cloned.verify_sequence());
+    }
+
+    #[test]
+    fn test_large_number_of_entries_sequence_integrity() {
+        // 大量エントリでもシーケンスが連続していること
+        let mut log = AuditLog::new();
+        for i in 0u64..256 {
+            log.append(
+                AuditEventKind::StatuteAmended,
+                i % 10,
+                "bulk",
+                "entry",
+                i * NS,
+            );
+        }
+        assert_eq!(log.len(), 256);
+        assert!(log.verify_sequence());
+        assert_eq!(log.next_sequence, 256);
     }
 }
