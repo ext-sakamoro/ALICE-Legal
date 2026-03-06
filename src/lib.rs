@@ -54,9 +54,12 @@
 
 pub mod audit;
 pub mod contract;
+pub mod dispute;
 #[cfg(feature = "ffi")]
 pub mod ffi;
 pub mod hash_utils;
+pub mod oracle;
+pub mod penalty;
 pub mod procedure;
 pub mod statute;
 
