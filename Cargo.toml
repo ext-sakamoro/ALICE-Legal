@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Moroya Sakamoto"]
 description = "ALICE-Legal — Deterministic legal tree compilation, contract execution, administrative procedure events"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/ext-sakamoro/ALICE-Legal"
 
 [dependencies]
