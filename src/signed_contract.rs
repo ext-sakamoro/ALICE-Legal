@@ -9,7 +9,9 @@
 //! its [`ContractLog::head`] hash and publishing it on
 //! [`alice_blockchain::Blockchain`].
 
-use alice_blockchain::{hash_data, Hash, KeyPair, MerkleTree, PublicKey, Signature};
+use alice_blockchain::{
+    hash_data, Hash, KeyPair, MerkleTree, PublicKey, Signature, TimeStamp, TimeStampToken,
+};
 use std::collections::BTreeMap;
 
 // ---------------------------------------------------------------------------
@@ -76,10 +78,15 @@ impl ContractRecord {
 // ---------------------------------------------------------------------------
 
 /// A contract record signed by one or more parties.
+///
+/// An optional `RFC 3161`-style [`TimeStampToken`] can be attached via
+/// [`SignedContract::attach_timestamp`], anchoring the contract to a specific
+/// wall-clock moment as sworn to by a trusted Time-Stamp Authority (`TSA`).
 #[derive(Debug, Clone)]
 pub struct SignedContract {
     pub record: ContractRecord,
     pub signatures: Vec<(PublicKey, Signature)>,
+    pub timestamp_token: Option<TimeStampToken>,
 }
 
 impl SignedContract {
@@ -89,6 +96,7 @@ impl SignedContract {
         Self {
             record,
             signatures: Vec::new(),
+            timestamp_token: None,
         }
     }
 
@@ -96,6 +104,26 @@ impl SignedContract {
     pub fn sign(&mut self, kp: &KeyPair) {
         let sig = kp.sign(&self.record.canonical_bytes());
         self.signatures.push((kp.public(), sig));
+    }
+
+    /// Attach an `RFC 3161` time-stamp token issued by the supplied `TSA` key
+    /// over the contract's content digest at `(unix_seconds, nanos)`.
+    pub fn attach_timestamp(&mut self, tsa: &KeyPair, unix_seconds: u64, nanos: u32) {
+        let payload = self.record.digest();
+        let stamp = TimeStamp::new(payload, unix_seconds, nanos);
+        self.timestamp_token = Some(TimeStampToken::issue(tsa, stamp));
+    }
+
+    /// Verify the attached time-stamp token. Returns `true` when no token is
+    /// attached (unsigned time is not an error), or when the token verifies
+    /// under its own recorded `TSA` key AND its payload hash matches the
+    /// current record digest.
+    #[must_use]
+    pub fn verify_timestamp(&self) -> bool {
+        let Some(token) = self.timestamp_token.as_ref() else {
+            return true;
+        };
+        token.verify() && token.stamp.payload_hash == self.record.digest()
     }
 
     /// Verify that every attached signature matches the recorded contract.
@@ -291,6 +319,33 @@ mod tests {
         // Simulate an attacker mutating the stored record.
         log.contracts[0].record.id = "attacker".into();
         assert!(!log.verify());
+    }
+
+    #[test]
+    fn contract_without_timestamp_verifies_trivially() {
+        let sc = SignedContract::new(record("C-1"));
+        assert!(sc.verify_timestamp());
+    }
+
+    #[test]
+    fn timestamp_verifies_when_attached() {
+        let signer = KeyPair::from_seed([1u8; 32]);
+        let tsa = KeyPair::from_seed([2u8; 32]);
+        let mut sc = SignedContract::new(record("C-1"));
+        sc.sign(&signer);
+        sc.attach_timestamp(&tsa, 1_720_000_000, 0);
+        assert!(sc.verify_timestamp());
+    }
+
+    #[test]
+    fn tampering_record_breaks_timestamp() {
+        let signer = KeyPair::from_seed([1u8; 32]);
+        let tsa = KeyPair::from_seed([2u8; 32]);
+        let mut sc = SignedContract::new(record("C-1"));
+        sc.sign(&signer);
+        sc.attach_timestamp(&tsa, 1_720_000_000, 0);
+        sc.record.id = "attacker".into();
+        assert!(!sc.verify_timestamp());
     }
 
     #[test]

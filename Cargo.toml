@@ -1,6 +1,6 @@
 [package]
 name = "alice-legal"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 description = "ALICE-Legal — Deterministic legal tree compilation, contract execution, administrative procedure events"
