@@ -7,7 +7,8 @@
     clippy::missing_const_for_fn,
     clippy::too_long_first_doc_paragraph,
     clippy::missing_panics_doc,
-    clippy::cast_lossless
+    clippy::cast_lossless,
+    clippy::manual_let_else
 )]
 
 //! # ALICE-Legal
