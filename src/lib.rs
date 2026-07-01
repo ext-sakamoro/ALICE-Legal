@@ -10,9 +10,6 @@
     clippy::cast_lossless
 )]
 
-pub mod signed_contract;
-pub use signed_contract::{ContractLog, ContractRecord, SignedContract};
-
 //! # ALICE-Legal
 //!
 //! Deterministic legal tree compilation, contract execution, and
@@ -62,6 +59,8 @@ pub use signed_contract::{ContractLog, ContractRecord, SignedContract};
 //! ```
 
 pub mod audit;
+pub mod signed_contract;
+pub use signed_contract::{ContractLog, ContractRecord, SignedContract};
 pub mod contract;
 pub mod dispute;
 #[cfg(feature = "ffi")]
