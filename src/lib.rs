@@ -1,8 +1,17 @@
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
-    clippy::cast_sign_loss
+    clippy::cast_sign_loss,
+    clippy::doc_markdown,
+    clippy::module_name_repetitions,
+    clippy::missing_const_for_fn,
+    clippy::too_long_first_doc_paragraph,
+    clippy::missing_panics_doc,
+    clippy::cast_lossless
 )]
+
+pub mod signed_contract;
+pub use signed_contract::{ContractLog, ContractRecord, SignedContract};
 
 //! # ALICE-Legal
 //!

@@ -1,6 +1,6 @@
 [package]
 name = "alice-legal"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Moroya Sakamoto <sakamoro@alicelaw.net>"]
 description = "ALICE-Legal — Deterministic legal tree compilation, contract execution, administrative procedure events"
@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/ext-sakamoro/ALICE-Legal"
 
 [dependencies]
+alice-blockchain = { path = "../ALICE-Blockchain" }
 
 [lib]
 name = "alice_legal"
