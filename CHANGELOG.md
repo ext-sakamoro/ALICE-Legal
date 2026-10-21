@@ -4,6 +4,9 @@ All notable changes to ALICE-Legal will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- CI: `Test (public siblings)` job `cargo test --all-features` を走らせ、cargo の失敗、失敗した試験、通った試験が 166 件未満のどれでも失敗 `ci/**` の branch でも走る `scripts/preflight.sh` は生成し直して同じ step を持つ
+
 ### Changed
 - `signed_contract` の Ed25519 / SHA-256 / `MerkleTree` と時刻印 (`TimeStamp` / `TimeStampToken`) を `alice-sign` (MIT OR Apache-2.0、公開、git rev 6b79a0ba、feature `timestamp`) から取るようにした 型と byte 列は同じ (これまでの依存先も同じ実装) 公開の source だけで build できる
 
