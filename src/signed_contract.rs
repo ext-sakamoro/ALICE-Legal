@@ -6,10 +6,9 @@
 //! aggregated into a hash-chain committed to via [`ContractLog`].
 //!
 //! Consumers can further anchor the chain into an external ledger by taking
-//! its [`ContractLog::head`] hash and publishing it on
-//! [`alice_blockchain::Blockchain`].
+//! its [`ContractLog::head`] hash and publishing it there.
 
-use alice_blockchain::{
+use alice_sign::{
     hash_data, Hash, KeyPair, MerkleTree, PublicKey, Signature, TimeStamp, TimeStampToken,
 };
 use std::collections::BTreeMap;
