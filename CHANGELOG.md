@@ -4,6 +4,10 @@ All notable changes to ALICE-Legal will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+- CI: `security-audit.yml` を追加 毎回新しい解決で `cargo audit` と `cargo deny --all-features check all` を走らせ、解決と deny の graph がこの crate を含むこと (0 件は失敗) を検査する ignore する勧告は無い 週次は火曜 02:47 UTC
+- `deny.toml` を追加: alice-sign の git source を許可
+
 ### Added
 - CI: `Test (public siblings)` job `cargo test --all-features` を走らせ、cargo の失敗、失敗した試験、通った試験が 166 件未満のどれでも失敗 `ci/**` の branch でも走る `scripts/preflight.sh` は生成し直して同じ step を持つ
 
