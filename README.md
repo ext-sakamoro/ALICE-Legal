@@ -142,4 +142,6 @@ cargo test
 
 ## License
 
-MIT
+`LicenseRef-Proprietary`. The text is [LICENSE-Proprietary](LICENSE-Proprietary).
+
+Enquiries: https://extoria.co.jp/
