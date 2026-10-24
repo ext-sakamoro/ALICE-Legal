@@ -22,7 +22,7 @@
 //! - [`contract`] — Smart contract-like deterministic contract execution
 //! - [`procedure`] — Administrative procedures as tamper-evident event streams
 //! - [`audit`] — Immutable audit trail for all legal operations
-//! - [`hash_utils`] — Shared FNV-1a hashing utility
+//! - [`law_id`] — record identifiers (LawIdHasher v2, 32 bytes)
 //!
 //! ## Example
 //!
@@ -66,7 +66,7 @@ pub mod contract;
 pub mod dispute;
 #[cfg(feature = "ffi")]
 pub mod ffi;
-pub mod hash_utils;
+pub mod law_id;
 pub mod oracle;
 pub mod penalty;
 pub mod prelude;

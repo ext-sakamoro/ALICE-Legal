@@ -4,7 +4,7 @@
 //! 申立 → 応答 → 仲裁 → 裁定 の標準的なフロー。
 
 use crate::contract::{ContractId, PartyId};
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// 紛争状態。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +50,7 @@ pub struct Dispute {
     /// 状態。
     pub status: DisputeStatus,
     /// 申立理由ハッシュ。
-    pub reason_hash: u64,
+    pub reason_hash: Digest,
     /// 申立時刻。
     pub filed_ns: u64,
     /// 応答期限。
@@ -103,7 +103,7 @@ impl DisputeManager {
             claimant,
             respondent,
             status: DisputeStatus::Filed,
-            reason_hash: fnv1a(reason.as_bytes()),
+            reason_hash: law_id::text("alice-legal/dispute/reason/v1", reason),
             filed_ns: now_ns,
             response_deadline_ns: now_ns + self.default_response_window_ns,
             resolution: None,

@@ -3,7 +3,7 @@
 //! All monetary amounts are represented as `i128` fixed-point ticks to avoid
 //! floating-point non-determinism. No external dependencies are used.
 
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// Unique identifier for a contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,10 +33,10 @@ pub enum ContractStatus {
 /// A precondition that must be satisfied for the contract to proceed.
 #[derive(Debug, Clone)]
 pub struct Condition {
-    /// FNV-1a hash of the human-readable condition description.
-    pub description_hash: u64,
-    /// FNV-1a hash identifying the evaluation logic/oracle.
-    pub evaluator_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the human-readable condition description.
+    pub description_hash: Digest,
+    /// v2 identifier ([`crate::law_id`]) identifying the evaluation logic/oracle.
+    pub evaluator_hash: Digest,
     /// Whether this condition has been marked as met.
     pub met: bool,
 }
@@ -71,8 +71,8 @@ pub struct Contract {
     pub obligations: Vec<Obligation>,
     /// Creation timestamp in Unix nanoseconds.
     pub created_ns: u64,
-    /// FNV-1a hash computed from the party IDs and creation timestamp.
-    pub content_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the party IDs and creation timestamp.
+    pub content_hash: Digest,
 }
 
 impl Contract {
@@ -85,12 +85,12 @@ impl Contract {
     /// * `created_ns` — Creation timestamp in Unix nanoseconds.
     #[must_use]
     pub fn new(id: u64, parties: &[u64], created_ns: u64) -> Self {
-        // Deterministic hash: party IDs concatenated as bytes + created_ns bytes
-        let mut hash_input = Vec::with_capacity(parties.len() * 8 + 8);
+        // the number of parties, each party id, then the creation time
+        let mut h = law_id::hasher("alice-legal/contract/content/v1").u64(parties.len() as u64);
         for &p in parties {
-            hash_input.extend_from_slice(&p.to_le_bytes());
+            h = h.u64(p);
         }
-        hash_input.extend_from_slice(&created_ns.to_le_bytes());
+        let content_hash = h.u64(created_ns).finish();
 
         Self {
             id: ContractId(id),
@@ -99,7 +99,7 @@ impl Contract {
             conditions: Vec::new(),
             obligations: Vec::new(),
             created_ns,
-            content_hash: fnv1a(&hash_input),
+            content_hash,
         }
     }
 
@@ -107,13 +107,16 @@ impl Contract {
     ///
     /// # Arguments
     ///
-    /// * `description` — Human-readable description; stored as FNV-1a hash.
-    /// * `evaluator` — Identifier of the evaluation logic; stored as FNV-1a hash.
+    /// * `description` — Human-readable description; stored as its v2 identifier.
+    /// * `evaluator` — Identifier of the evaluation logic; stored as its v2 identifier.
     pub fn add_condition(&mut self, description: &str, evaluator: &str) -> usize {
         let idx = self.conditions.len();
         self.conditions.push(Condition {
-            description_hash: fnv1a(description.as_bytes()),
-            evaluator_hash: fnv1a(evaluator.as_bytes()),
+            description_hash: law_id::text(
+                "alice-legal/contract/condition-description/v1",
+                description,
+            ),
+            evaluator_hash: law_id::text("alice-legal/contract/condition-evaluator/v1", evaluator),
             met: false,
         });
         idx
@@ -322,7 +325,7 @@ mod tests {
     #[test]
     fn test_content_hash_nonzero() {
         let c = Contract::new(10, &[1, 2], 1_000_000);
-        assert_ne!(c.content_hash, 0);
+        assert_ne!(c.content_hash, crate::law_id::ZERO);
     }
 
     #[test]
@@ -395,8 +398,8 @@ mod tests {
     fn test_condition_hashes_nonzero() {
         let mut c = Contract::new(20, &[1, 2], 0);
         let idx = c.add_condition("payment cleared", "bank-oracle");
-        assert_ne!(c.conditions[idx].description_hash, 0);
-        assert_ne!(c.conditions[idx].evaluator_hash, 0);
+        assert_ne!(c.conditions[idx].description_hash, crate::law_id::ZERO);
+        assert_ne!(c.conditions[idx].evaluator_hash, crate::law_id::ZERO);
     }
 
     #[test]
