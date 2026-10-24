@@ -1,5 +1,5 @@
 // ALICE-Legal — Unity C# Bindings
-// License: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Author: Moroya Sakamoto
 //
 // 21 DllImport + 4 IDisposable RAII wrappers

@@ -2,7 +2,7 @@
 //!
 //! Provides 21 `extern "C"` functions for Unity / UE5 / native integration.
 //!
-//! License: MIT
+//! SPDX-License-Identifier: LicenseRef-Proprietary
 //! Author: Moroya Sakamoto
 
 use std::slice;

@@ -1,5 +1,5 @@
 // ALICE-Legal — UE5 C++ Bindings
-// License: MIT
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // Author: Moroya Sakamoto
 //
 // 21 extern "C" declarations + 4 RAII wrapper classes
