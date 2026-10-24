@@ -100,6 +100,16 @@ fn steps_moved_to_another_procedure_do_not_verify_there() {
 }
 
 #[test]
+fn a_step_out_of_its_position_is_refused_even_with_a_matching_head() {
+    // the last step's sequence is changed and the head recomputed from the changed steps: every
+    // link still matches, only the position does not
+    let (mut p, _) = procedure();
+    p.steps[2].sequence = 7;
+    let head = p.head();
+    fails(&p, &head);
+}
+
+#[test]
 fn an_empty_procedure_has_a_head_of_its_own() {
     let p1 = Procedure::new(1);
     let p2 = Procedure::new(2);

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <utility>
 
@@ -37,7 +38,8 @@ void*    alice_procedure_new(uint64_t id);
 void     alice_procedure_add_step(void* proc, uint8_t kind,
              const uint8_t* actor, uint32_t actor_len,
              const uint8_t* content, uint32_t content_len, uint64_t timestamp_ns);
-uint8_t  alice_procedure_verify_chain(const void* proc);
+uint8_t  alice_procedure_head(const void* proc, uint8_t* out /* 32 bytes */);
+uint8_t  alice_procedure_verify_chain(const void* proc, const uint8_t* head /* 32 bytes */);
 uint32_t alice_procedure_step_count(const void* proc);
 void     alice_procedure_destroy(void* proc);
 
@@ -132,7 +134,8 @@ public:
         alice_procedure_add_step(ptr_, kind, actor, actor_len, content, content_len, timestamp_ns);
     }
 
-    bool VerifyChain() const { return alice_procedure_verify_chain(ptr_) != 0; }
+    std::array<uint8_t, 32> Head() const { std::array<uint8_t, 32> h{}; alice_procedure_head(ptr_, h.data()); return h; }
+    bool VerifyChain(const std::array<uint8_t, 32>& head) const { return alice_procedure_verify_chain(ptr_, head.data()) != 0; }
     uint32_t StepCount() const { return alice_procedure_step_count(ptr_); }
 };
 

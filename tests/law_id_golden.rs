@@ -3,7 +3,7 @@
 //! from the kind, `sha256(b"alice-legal/semantics/text-and-integers/v1")` and the typed values, and
 //! the records built through this crate's API must give exactly those bytes.
 
-use alice_legal::law_id::{Digest, LEGAL_SEMANTICS_ID, ZERO};
+use alice_legal::law_id::{Digest, LEGAL_SEMANTICS_ID};
 use alice_legal::oracle::{compute_data_hash, OracleRegistry, OracleType};
 use alice_legal::penalty::{PenaltyEngine, PenaltyKind, PenaltyRule};
 use alice_legal::prelude::*;
@@ -84,10 +84,19 @@ fn a_procedure_chain_link() {
     let mut p = Procedure::new(1);
     p.add_step(StepKind::Application, "actor", "x", 1);
     p.add_step(StepKind::Review, "actor", "y", 2);
-    assert_eq!(p.steps[0].prev_hash, ZERO);
+    // the first link: procedure id 1, sequence 0
+    assert_eq!(
+        hex(&p.steps[0].prev_hash),
+        "cf8ca22e8f998359a99c2bc49af59502a30d32a0b62e860a201f4e350dbaebc3"
+    );
     assert_eq!(
         hex(&p.steps[1].prev_hash),
-        "ab7b3b3718d16535c4586785a7e4b0dfa37e5e7ec74cd7c5550080c224e9eb94"
+        "385b1d8a1fa2286e0b0ecdbb3f21bf6d7570c39064a5451a26eb3d8db4d23ae0"
     );
-    assert!(p.verify_chain());
+    let head = p.head();
+    assert_eq!(
+        hex(&head),
+        "d88be8dcd475bb83e48a9a5a1dc547d8b68b8b8ff308db8e1d1542ade8c00ae4"
+    );
+    assert!(p.verify_chain(&head));
 }

@@ -7,10 +7,12 @@ All notable changes to ALICE-Legal will be documented in this file.
 ### 破壊的変更
 - 記録の識別子を FNV-1a 64 bit から LawIdHasher v2 (ALICE-Zip `law_id`、32 byte) に変更 audit / procedure の actor・content・prev、dispute の reason、oracle の id・name・data、penalty の record、contract の content・condition の description と evaluator、statute の title と clause の content が `[u8; 32]` (`law_id::Digest`) になる `OracleRegistry::register` は `Digest` を返し、`find_oracle` / `deactivate` と `OracleResponse::oracle_id` も `Digest` を取る
 - `hash_utils` (`fnv1a`) を削除し、`law_id` (`Digest` / `ZERO` / `LEGAL_SEMANTICS_ID` / `hasher` / `text` / `data`) を追加
-- 手続きの連鎖の link は前の段の記録全体 (sequence・kind・actor・timestamp・content・link) の v2 識別子 (最初の段は `law_id::ZERO`) 前の段の actor・kind・timestamp・sequence の書き換えも `verify_chain` で検出する
+- 手続きの連鎖の link は手続きの id と前の段の記録全体 (sequence・kind・actor・timestamp・content・link) の v2 識別子、最初の段の link は手続きの id と sequence 0 の v2 識別子
+- `Procedure::verify_chain(&self)` を `verify_chain(&self, expected_head: &Digest)` に変更し、`Procedure::head` (次の段が持つ link) を追加 段の外に持った head と照合し、段の位置 (sequence が index と一致) も確かめる 検出するもの・しないものは `procedure` の module doc に記載
+- FFI: `alice_procedure_verify_chain(proc, head)` (32 byte の head を取る) に変更し、`alice_procedure_head(proc, out)` を追加 UE5 / Unity binding も同じ
 
 ### Added
-- 試験 `tests/identifier_collision.rs` (FNV-1a 64 bit で衝突する 2 つの文字列で、各記録の識別子が別になることと oracle の応答の照合を確かめる) 、`tests/law_id_golden.rs` (ALICE-Zip の独立実装で計算した識別子) と `tests/procedure_chain_record.rs` (過去の段の各 field の書き換えで連鎖の照合が失敗する)
+- 試験 `tests/identifier_collision.rs` (FNV-1a 64 bit で衝突する 2 つの文字列で、各記録の識別子が別になることと oracle の応答の照合を確かめる) 、`tests/law_id_golden.rs` (ALICE-Zip の独立実装で計算した識別子) と `tests/procedure_chain_record.rs` (各段の各 field の書き換え、段の削除・入れ替え・切り詰め・延長、別の手続きへの移動で連鎖の照合が失敗する)
 - 依存 `alice-zip` (git)、`deny.toml` の allow-git に ALICE-DetMath と ALICE-Zip
 
 ### Security
