@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// The category of legal event recorded in the audit log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,11 +40,11 @@ pub struct AuditEntry {
     /// The numeric ID of the statute, contract, or procedure affected.
     pub entity_id: u64,
     /// FNV-1a hash of the actor's identity string.
-    pub actor_hash: u64,
+    pub actor_hash: Digest,
     /// When the event occurred, in Unix nanoseconds.
     pub timestamp_ns: u64,
     /// FNV-1a hash of the event's content/payload string.
-    pub content_hash: u64,
+    pub content_hash: Digest,
 }
 
 /// Append-only, sequenced audit log for all legal operations.
@@ -97,9 +97,9 @@ impl AuditLog {
             sequence: seq,
             kind,
             entity_id,
-            actor_hash: fnv1a(actor.as_bytes()),
+            actor_hash: law_id::text("alice-legal/audit-entry/actor/v1", actor),
             timestamp_ns,
-            content_hash: fnv1a(content.as_bytes()),
+            content_hash: law_id::text("alice-legal/audit-entry/content/v1", content),
         });
         // Update the O(1) entity index.
         self.entity_index.entry(entity_id).or_default().push(idx);

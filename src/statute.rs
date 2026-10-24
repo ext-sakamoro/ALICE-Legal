@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// Unique identifier for a statute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -45,7 +45,7 @@ pub struct Clause {
     /// Optional parent clause id for nested structures.
     pub parent_id: Option<u64>,
     /// FNV-1a hash of the clause's natural-language content.
-    pub content_hash: u64,
+    pub content_hash: Digest,
     /// Unix-epoch nanosecond timestamp at which this clause becomes effective.
     pub effective_from_ns: u64,
     /// Optional expiry timestamp (exclusive). `None` means no expiry.
@@ -62,7 +62,7 @@ pub struct StatuteTree {
     /// The statute's unique identifier.
     pub id: StatuteId,
     /// FNV-1a hash of the statute's title string.
-    pub title_hash: u64,
+    pub title_hash: Digest,
     /// All clauses in document order.
     pub clauses: Vec<Clause>,
     /// Monotonically increasing version counter; incremented on each amendment.
@@ -86,7 +86,7 @@ impl StatuteTree {
     pub fn new(id: u64, title: &str) -> Self {
         Self {
             id: StatuteId(id),
-            title_hash: fnv1a(title.as_bytes()),
+            title_hash: law_id::text("alice-legal/statute/title/v1", title),
             clauses: Vec::new(),
             version: 1,
             next_clause_id: 1,
@@ -117,7 +117,7 @@ impl StatuteTree {
             id,
             kind,
             parent_id,
-            content_hash: fnv1a(content.as_bytes()),
+            content_hash: law_id::text("alice-legal/statute/clause-content/v1", content),
             effective_from_ns,
             expires_ns: None,
         });

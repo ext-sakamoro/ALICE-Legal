@@ -4,7 +4,7 @@
 //! オラクル判定結果をハッシュで検証し、改竄を防止。
 
 use crate::contract::ContractId;
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// オラクル種別。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,13 +38,13 @@ pub enum OracleVerdict {
 #[derive(Debug, Clone)]
 pub struct OracleResponse {
     /// オラクル ID。
-    pub oracle_id: u64,
+    pub oracle_id: Digest,
     /// 判定結果。
     pub verdict: OracleVerdict,
     /// 判定時刻 (Unix ns)。
     pub timestamp_ns: u64,
     /// 応答データのハッシュ (検証用)。
-    pub data_hash: u64,
+    pub data_hash: Digest,
     /// 対象契約 ID。
     pub contract_id: ContractId,
     /// 対象条件インデックス。
@@ -54,12 +54,12 @@ pub struct OracleResponse {
 /// オラクル登録情報。
 #[derive(Debug, Clone)]
 pub struct OracleRegistration {
-    /// オラクル ID。
-    pub id: u64,
+    /// オラクル ID (名称の識別子)。
+    pub id: Digest,
     /// オラクル種別。
     pub oracle_type: OracleType,
     /// 名称ハッシュ。
-    pub name_hash: u64,
+    pub name_hash: Digest,
     /// 信頼スコア (0-100)。
     pub trust_score: u8,
     /// 有効フラグ。
@@ -86,12 +86,12 @@ impl OracleRegistry {
     }
 
     /// オラクルを登録。
-    pub fn register(&mut self, oracle_type: OracleType, name: &str, trust_score: u8) -> u64 {
-        let id = fnv1a(name.as_bytes());
+    pub fn register(&mut self, oracle_type: OracleType, name: &str, trust_score: u8) -> Digest {
+        let id = law_id::text("alice-legal/oracle/name/v1", name);
         self.oracles.push(OracleRegistration {
             id,
             oracle_type,
-            name_hash: fnv1a(name.as_bytes()),
+            name_hash: id,
             trust_score: trust_score.min(100),
             active: true,
         });
@@ -105,12 +105,12 @@ impl OracleRegistry {
 
     /// オラクルを ID で検索。
     #[must_use]
-    pub fn find_oracle(&self, id: u64) -> Option<&OracleRegistration> {
+    pub fn find_oracle(&self, id: Digest) -> Option<&OracleRegistration> {
         self.oracles.iter().find(|o| o.id == id)
     }
 
     /// オラクルを無効化。
-    pub fn deactivate(&mut self, id: u64) {
+    pub fn deactivate(&mut self, id: Digest) {
         if let Some(o) = self.oracles.iter_mut().find(|o| o.id == id) {
             o.active = false;
         }
@@ -144,7 +144,7 @@ impl OracleRegistry {
     /// 応答データのハッシュ検証。
     #[must_use]
     pub fn verify_response(response: &OracleResponse, raw_data: &[u8]) -> bool {
-        fnv1a(raw_data) == response.data_hash
+        compute_data_hash(raw_data) == response.data_hash
     }
 }
 
@@ -156,8 +156,8 @@ impl Default for OracleRegistry {
 
 /// 応答データからハッシュを生成。
 #[must_use]
-pub fn compute_data_hash(data: &[u8]) -> u64 {
-    fnv1a(data)
+pub fn compute_data_hash(data: &[u8]) -> Digest {
+    law_id::data("alice-legal/oracle/data/v1", data)
 }
 
 /// マルチオラクル合意チェック。
@@ -217,7 +217,7 @@ mod tests {
             oracle_id: 1,
             verdict: OracleVerdict::Satisfied,
             timestamp_ns: 1000,
-            data_hash: fnv1a(b"test"),
+            data_hash: compute_data_hash(b"test"),
             contract_id: ContractId(42),
             condition_index: 0,
         });
@@ -255,7 +255,7 @@ mod tests {
             oracle_id: 1,
             verdict: OracleVerdict::Satisfied,
             timestamp_ns: 0,
-            data_hash: fnv1a(data),
+            data_hash: compute_data_hash(data),
             contract_id: ContractId(1),
             condition_index: 0,
         };
@@ -268,7 +268,7 @@ mod tests {
             oracle_id: 1,
             verdict: OracleVerdict::Satisfied,
             timestamp_ns: 0,
-            data_hash: fnv1a(b"original"),
+            data_hash: compute_data_hash(b"original"),
             contract_id: ContractId(1),
             condition_index: 0,
         };
