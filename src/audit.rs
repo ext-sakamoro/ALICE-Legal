@@ -74,19 +74,22 @@ pub struct AuditEntry {
     pub prev_hash: Digest,
 }
 
-/// The name of an event kind in the chain link
-const fn kind_tag(kind: AuditEventKind) -> &'static str {
-    match kind {
-        AuditEventKind::StatuteCreated => "statute-created",
-        AuditEventKind::StatuteAmended => "statute-amended",
-        AuditEventKind::ContractCreated => "contract-created",
-        AuditEventKind::ContractFulfilled => "contract-fulfilled",
-        AuditEventKind::ContractBreached => "contract-breached",
-        AuditEventKind::ProcedureStarted => "procedure-started",
-        AuditEventKind::ProcedureCompleted => "procedure-completed",
-        AuditEventKind::ProcedureRejected => "procedure-rejected",
-        AuditEventKind::DocumentAnalyzed => "document-analyzed",
-        AuditEventKind::TemplateCompiled => "template-compiled",
+impl AuditEventKind {
+    /// The kind's name in the chain link (and so in every link after an entry of this kind).
+    #[must_use]
+    pub const fn tag(self) -> &'static str {
+        match self {
+            Self::StatuteCreated => "statute-created",
+            Self::StatuteAmended => "statute-amended",
+            Self::ContractCreated => "contract-created",
+            Self::ContractFulfilled => "contract-fulfilled",
+            Self::ContractBreached => "contract-breached",
+            Self::ProcedureStarted => "procedure-started",
+            Self::ProcedureCompleted => "procedure-completed",
+            Self::ProcedureRejected => "procedure-rejected",
+            Self::DocumentAnalyzed => "document-analyzed",
+            Self::TemplateCompiled => "template-compiled",
+        }
     }
 }
 
@@ -104,7 +107,7 @@ fn link(log_id: u64, prev: &AuditEntry) -> Digest {
     law_id::hasher("alice-legal/audit/link/v1")
         .u64(log_id)
         .u64(prev.sequence)
-        .str(kind_tag(prev.kind))
+        .str(prev.kind.tag())
         .u64(prev.entity_id)
         .id(&prev.actor_hash)
         .u64(prev.timestamp_ns)

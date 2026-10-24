@@ -15,6 +15,7 @@ All notable changes to ALICE-Legal will be documented in this file.
 - FFI: `alice_procedure_verify_chain(proc, head)` (32 byte の head を取る) に変更し、`alice_procedure_head(proc, out)` を追加 UE5 / Unity binding も同じ
 
 ### Added
+- `AuditEventKind::tag` (`const fn`): 種類ごとの連鎖の link が持つ名前 (`document-analyzed` 等)
 - 試験 `tests/audit_chain.rs` (各 entry の書き換え・削除・入れ替え・切り詰め・延長・別の log からの継ぎ合わせを段の外の head で検出し、自分の head に対しては切り詰めを検出できないこと) と `tests/law_id_golden.rs` の監査の連鎖の識別子
 - 試験 `tests/identifier_collision.rs` (FNV-1a 64 bit で衝突する 2 つの文字列で、各記録の識別子が別になることと oracle の応答の照合を確かめる) 、`tests/law_id_golden.rs` (ALICE-Zip の独立実装で計算した識別子) と `tests/procedure_chain_record.rs` (各段の各 field の書き換え、段の削除・入れ替え・切り詰め・延長、別の手続きへの移動で連鎖の照合が失敗する)
 - 依存 `alice-zip` (git)、`deny.toml` の allow-git に ALICE-DetMath と ALICE-Zip
