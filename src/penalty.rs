@@ -4,7 +4,7 @@
 //! 自動的にペナルティを適用する。
 
 use crate::contract::{ContractId, PartyId};
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// ペナルティ種別。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,7 +67,7 @@ pub struct PenaltyRecord {
     /// 状態。
     pub status: PenaltyStatus,
     /// 記録ハッシュ。
-    pub record_hash: u64,
+    pub record_hash: Digest,
 }
 
 /// ペナルティエンジン。
@@ -110,9 +110,11 @@ impl PenaltyEngine {
             }
         }
 
-        let mut hash_data = rule_id.to_le_bytes().to_vec();
-        hash_data.extend_from_slice(&party.0.to_le_bytes());
-        hash_data.extend_from_slice(&now_ns.to_le_bytes());
+        let record_hash = law_id::hasher("alice-legal/penalty/record/v1")
+            .u64(rule_id)
+            .u64(party.0)
+            .u64(now_ns)
+            .finish();
 
         let record = PenaltyRecord {
             rule_id,
@@ -120,7 +122,7 @@ impl PenaltyEngine {
             amount_ticks: rule.amount_ticks,
             applied_ns: now_ns,
             status: PenaltyStatus::Executed,
-            record_hash: fnv1a(&hash_data),
+            record_hash,
         };
         self.records.push(record);
         Some(self.records.len() - 1)
@@ -294,7 +296,7 @@ mod tests {
         let mut e = PenaltyEngine::new();
         e.add_rule(make_rule(1, PenaltyKind::FixedAmount, 1000));
         let idx = e.execute_penalty(1, PartyId(1), 0).unwrap();
-        assert_ne!(e.get_record(idx).unwrap().record_hash, 0);
+        assert_ne!(e.get_record(idx).unwrap().record_hash, crate::law_id::ZERO);
     }
 
     #[test]
