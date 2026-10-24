@@ -1,10 +1,11 @@
 //! C FFI for ALICE-Legal
 //!
-//! Provides 21 `extern "C"` functions for Unity / UE5 / native integration.
+//! Provides 22 `extern "C"` functions for Unity / UE5 / native integration.
 //!
 //! SPDX-License-Identifier: LicenseRef-Proprietary
 //! Author: Moroya Sakamoto
 
+use std::ptr;
 use std::slice;
 
 use crate::audit::{AuditEventKind, AuditLog};
@@ -319,17 +320,37 @@ pub unsafe extern "C" fn alice_procedure_add_step(
     (*proc_ptr).add_step(kind, actor, content, timestamp_ns);
 }
 
-/// ハッシュチェーンの整合性を検証する。有効=1, 無効=0。
+/// 次の段が持つ link (head、32 byte) を `out` に書く。書けた=1, null=0。
 ///
 /// # Safety
 ///
-/// `proc` は有効なポインタであること。
+/// `proc` は有効なポインタ、`out` は 32 byte 書ける領域であること。
 #[no_mangle]
-pub unsafe extern "C" fn alice_procedure_verify_chain(proc_ptr: *const Procedure) -> u8 {
-    if proc_ptr.is_null() {
+pub unsafe extern "C" fn alice_procedure_head(proc_ptr: *const Procedure, out: *mut u8) -> u8 {
+    if proc_ptr.is_null() || out.is_null() {
         return 0;
     }
-    u8::from((*proc_ptr).verify_chain())
+    let head = (*proc_ptr).head();
+    ptr::copy_nonoverlapping(head.as_ptr(), out, head.len());
+    1
+}
+
+/// 段の外に持った head (32 byte) に対して連鎖を検証する。有効=1, 無効=0。
+///
+/// # Safety
+///
+/// `proc` は有効なポインタ、`head` は 32 byte 読める領域であること。
+#[no_mangle]
+pub unsafe extern "C" fn alice_procedure_verify_chain(
+    proc_ptr: *const Procedure,
+    head: *const u8,
+) -> u8 {
+    if proc_ptr.is_null() || head.is_null() {
+        return 0;
+    }
+    let mut expected = [0u8; 32];
+    ptr::copy_nonoverlapping(head, expected.as_mut_ptr(), expected.len());
+    u8::from((*proc_ptr).verify_chain(&expected))
 }
 
 /// ステップ数を返す。
@@ -429,7 +450,6 @@ pub unsafe extern "C" fn alice_audit_destroy(log: *mut AuditLog) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ptr;
 
     #[test]
     fn test_statute_lifecycle() {
@@ -497,7 +517,13 @@ mod tests {
                 1_000_000_000,
             );
             assert_eq!(alice_procedure_step_count(proc), 1);
-            assert_eq!(alice_procedure_verify_chain(proc), 1);
+            let mut head = [0u8; 32];
+            assert_eq!(alice_procedure_head(proc, head.as_mut_ptr()), 1);
+            assert_eq!(alice_procedure_verify_chain(proc, head.as_ptr()), 1);
+            head[0] ^= 0x01;
+            assert_eq!(alice_procedure_verify_chain(proc, head.as_ptr()), 0);
+            assert_eq!(alice_procedure_verify_chain(proc, ptr::null()), 0);
+            assert_eq!(alice_procedure_head(proc, ptr::null_mut()), 0);
 
             alice_procedure_destroy(proc);
         }
@@ -548,7 +574,11 @@ mod tests {
             alice_contract_destroy(ptr::null_mut());
 
             // Procedure
-            assert_eq!(alice_procedure_verify_chain(ptr::null()), 0);
+            assert_eq!(
+                alice_procedure_verify_chain(ptr::null(), [0u8; 32].as_ptr()),
+                0
+            );
+            assert_eq!(alice_procedure_head(ptr::null(), [0u8; 32].as_mut_ptr()), 0);
             assert_eq!(alice_procedure_step_count(ptr::null()), 0);
             alice_procedure_destroy(ptr::null_mut());
 
@@ -643,7 +673,9 @@ mod tests {
                 );
             }
             assert_eq!(alice_procedure_step_count(proc), 4);
-            assert_eq!(alice_procedure_verify_chain(proc), 1);
+            let mut head = [0u8; 32];
+            assert_eq!(alice_procedure_head(proc, head.as_mut_ptr()), 1);
+            assert_eq!(alice_procedure_verify_chain(proc, head.as_ptr()), 1);
             alice_procedure_destroy(proc);
         }
     }

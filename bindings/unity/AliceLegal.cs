@@ -49,7 +49,8 @@ namespace Alice.Legal
             byte[] actor, uint actorLen,
             byte[] content, uint contentLen,
             ulong timestampNs);
-        [DllImport(Lib)] public static extern byte alice_procedure_verify_chain(IntPtr proc);
+        [DllImport(Lib)] public static extern byte alice_procedure_head(IntPtr proc, byte[] out32);
+        [DllImport(Lib)] public static extern byte alice_procedure_verify_chain(IntPtr proc, byte[] head32);
         [DllImport(Lib)] public static extern uint alice_procedure_step_count(IntPtr proc);
         [DllImport(Lib)] public static extern void alice_procedure_destroy(IntPtr proc);
 
@@ -141,7 +142,8 @@ namespace Alice.Legal
                 timestampNs);
         }
 
-        public bool VerifyChain => Native.alice_procedure_verify_chain(_ptr) != 0;
+        public byte[] Head() { var h = new byte[32]; Native.alice_procedure_head(_ptr, h); return h; }
+        public bool VerifyChain(byte[] head) => head != null && head.Length == 32 && Native.alice_procedure_verify_chain(_ptr, head) != 0;
         public uint StepCount => Native.alice_procedure_step_count(_ptr);
 
         public void Dispose()

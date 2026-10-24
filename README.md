@@ -87,7 +87,8 @@ proc.add_step(StepKind::Application, "citizen-001", "permit application", 1_000_
 proc.add_step(StepKind::Review,      "officer-042", "documents reviewed",  2_000_000_000);
 proc.add_step(StepKind::Approval,    "authority",   "permit granted",       3_000_000_000);
 
-assert!(proc.verify_chain()); // tamper detection
+let head = proc.head();          // keep outside the steps (store or sign it)
+assert!(proc.verify_chain(&head)); // tamper detection
 ```
 
 ### Audit log

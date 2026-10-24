@@ -1,8 +1,25 @@
 //! Administrative procedure modelled as a tamper-evident event stream.
 //!
-//! Each [`ProcedureStep`] chains to the previous via a hash of the prior
-//! step's `content_hash` XOR `prev_hash`. This allows [`Procedure::verify_chain`]
-//! to detect any post-hoc modification without an external database.
+//! Each [`ProcedureStep`] carries a link (`prev_hash`): the v2 identifier of the procedure id and
+//! the whole record of the step before it (sequence, kind, actor, timestamp, content, its own
+//! link). The first step's link is the identifier of the procedure id and sequence 0.
+//! [`Procedure::head`] is the link the next step would carry, so it covers the last step and the
+//! number of steps.
+//!
+//! # What [`Procedure::verify_chain`] guarantees
+//!
+//! Given the head recorded when the last step was added, kept outside the steps (stored or signed
+//! by the caller), `verify_chain(&head)` fails when, since then:
+//!
+//! - any field of any step was changed;
+//! - a step was removed, inserted or moved, or the chain was truncated or extended;
+//! - the steps were moved to another procedure, or the procedure id was changed.
+//!
+//! It does **not**:
+//!
+//! - protect the head itself: whoever can replace the stored head can rewrite the whole chain;
+//! - cover [`Procedure::status`], which is derived from the steps and not part of any link;
+//! - keep the actor or content text: only their identifiers are stored.
 
 use crate::law_id::{self, Digest};
 
@@ -89,10 +106,19 @@ const fn kind_tag(kind: StepKind) -> &'static str {
     }
 }
 
-/// The link a step carries to the step before it: that step's whole record (sequence, kind,
-/// actor, timestamp, content and its own link), each as a typed value
-fn link(prev: &ProcedureStep) -> Digest {
+/// The link the first step carries: the procedure id and sequence 0
+fn first_link(id: ProcedureId) -> Digest {
+    law_id::hasher("alice-legal/procedure/first-link/v1")
+        .u64(id.0)
+        .u32(0)
+        .finish()
+}
+
+/// The link a step carries to the step before it: the procedure id and that step's whole record
+/// (sequence, kind, actor, timestamp, content and its own link), each as a typed value
+fn link(id: ProcedureId, prev: &ProcedureStep) -> Digest {
     law_id::hasher("alice-legal/procedure-step/link/v1")
+        .u64(id.0)
         .u32(prev.sequence)
         .str(kind_tag(prev.kind))
         .id(&prev.actor_hash)
@@ -115,9 +141,9 @@ impl Procedure {
 
     /// Append a step to the procedure's event stream.
     ///
-    /// The `prev_hash` of the new step is computed from the previous step's
-    /// `content_hash` and `prev_hash`, creating a verifiable chain. For the
-    /// first step the `prev_hash` is `0`.
+    /// The `prev_hash` of the new step is the current [`Procedure::head`]: the link to the
+    /// previous step's whole record, or for the first step the link of the procedure id and
+    /// sequence 0. Record the head after adding a step to verify the chain later.
     ///
     /// The procedure status is updated to reflect the new step kind:
     /// - [`StepKind::Approval`] → [`ProcedureStatus::Approved`]
@@ -129,7 +155,7 @@ impl Procedure {
         let content_hash = law_id::text("alice-legal/procedure-step/content/v1", content);
         let actor_hash = law_id::text("alice-legal/procedure-step/actor/v1", actor);
 
-        let prev_hash = self.steps.last().map_or(law_id::ZERO, link);
+        let prev_hash = self.head();
 
         self.steps.push(ProcedureStep {
             sequence,
@@ -155,23 +181,31 @@ impl Procedure {
         };
     }
 
-    /// Verify the integrity of the hash chain across all recorded steps.
-    ///
-    /// Returns `true` if every step's `prev_hash` matches the hash recomputed
-    /// from the previous step's `content_hash` and `prev_hash`.
+    /// The link the next step would carry: the link to the last step's whole record, or for a
+    /// procedure with no steps the link of the procedure id and sequence 0
     #[must_use]
-    pub fn verify_chain(&self) -> bool {
-        for i in 1..self.steps.len() {
-            let prev = &self.steps[i - 1];
-            let current = &self.steps[i];
+    pub fn head(&self) -> Digest {
+        self.steps
+            .last()
+            .map_or_else(|| first_link(self.id), |last| link(self.id, last))
+    }
 
-            let expected = link(prev);
-
-            if current.prev_hash != expected {
+    /// Verify the chain against the head recorded outside the steps.
+    ///
+    /// Returns `true` when step `i` has sequence `i`, every step carries the link to the one
+    /// before it (the first, the link of the procedure id and sequence 0), and the head
+    /// recomputed from the last step equals `expected_head`. What this does and does not
+    /// detect is listed in the module documentation.
+    #[must_use]
+    pub fn verify_chain(&self, expected_head: &Digest) -> bool {
+        let mut expected = first_link(self.id);
+        for (i, step) in self.steps.iter().enumerate() {
+            if u32::try_from(i) != Ok(step.sequence) || step.prev_hash != expected {
                 return false;
             }
+            expected = link(self.id, step);
         }
-        true
+        expected == *expected_head
     }
 
     /// Return a reference to the most recently recorded step, or `None` if
@@ -237,9 +271,9 @@ mod tests {
         proc.add_step(StepKind::Review, "bob", "step two", 2 * NS);
         proc.add_step(StepKind::Approval, "carol", "step three", 3 * NS);
 
-        assert!(proc.verify_chain());
-        // First step always has prev_hash == 0
-        assert_eq!(proc.steps[0].prev_hash, crate::law_id::ZERO);
+        assert!(proc.verify_chain(&proc.head()));
+        // The first step carries the link of the procedure id and sequence 0
+        assert_eq!(proc.steps[0].prev_hash, first_link(proc.id));
     }
 
     #[test]
@@ -249,12 +283,13 @@ mod tests {
         proc.add_step(StepKind::Review, "bob", "review ok", 2 * NS);
         proc.add_step(StepKind::Approval, "carol", "approved", 3 * NS);
 
-        assert!(proc.verify_chain());
+        let head = proc.head();
+        assert!(proc.verify_chain(&head));
 
         // Tamper with the middle step's content_hash
         proc.steps[1].content_hash[0] ^= 0x01;
 
-        assert!(!proc.verify_chain());
+        assert!(!proc.verify_chain(&head));
     }
 
     #[test]
@@ -267,7 +302,7 @@ mod tests {
         assert_eq!(proc.status, ProcedureStatus::Completed);
         let last = proc.latest_step().unwrap();
         assert_eq!(last.kind, StepKind::Completion);
-        assert!(proc.verify_chain());
+        assert!(proc.verify_chain(&proc.head()));
     }
 
     #[test]
@@ -279,7 +314,7 @@ mod tests {
         assert_eq!(proc.status, ProcedureStatus::Rejected);
         let last = proc.latest_step().unwrap();
         assert_eq!(last.kind, StepKind::Rejection);
-        assert!(proc.verify_chain());
+        assert!(proc.verify_chain(&proc.head()));
     }
 
     #[test]
@@ -296,10 +331,10 @@ mod tests {
     }
 
     #[test]
-    fn test_first_step_prev_hash_is_zero() {
+    fn test_first_step_prev_hash_is_the_first_link() {
         let mut proc = Procedure::new(10);
         proc.add_step(StepKind::Application, "citizen", "submit", NS);
-        assert_eq!(proc.steps[0].prev_hash, crate::law_id::ZERO);
+        assert_eq!(proc.steps[0].prev_hash, first_link(proc.id));
     }
 
     #[test]
@@ -335,14 +370,14 @@ mod tests {
         let mut proc = Procedure::new(14);
         proc.add_step(StepKind::Application, "user", "only step", NS);
         // Single-step chain has nothing to verify — must return true
-        assert!(proc.verify_chain());
+        assert!(proc.verify_chain(&proc.head()));
     }
 
     #[test]
     fn test_verify_chain_empty_procedure() {
         let proc = Procedure::new(15);
         // Empty chain is trivially valid
-        assert!(proc.verify_chain());
+        assert!(proc.verify_chain(&proc.head()));
     }
 
     #[test]
@@ -350,11 +385,12 @@ mod tests {
         let mut proc = Procedure::new(16);
         proc.add_step(StepKind::Application, "alice", "step one", NS);
         proc.add_step(StepKind::Review, "bob", "step two", 2 * NS);
-        assert!(proc.verify_chain());
+        let head = proc.head();
+        assert!(proc.verify_chain(&head));
 
         // Tamper with the first step's content_hash: the second step's prev_hash is now wrong
         proc.steps[0].content_hash[0] ^= 0x01;
-        assert!(!proc.verify_chain());
+        assert!(!proc.verify_chain(&head));
     }
 
     #[test]
@@ -401,7 +437,7 @@ mod tests {
             proc.add_step(*kind, "actor", "content", (i as u64 + 1) * NS);
         }
         assert_eq!(proc.steps.len(), 7);
-        assert!(proc.verify_chain());
+        assert!(proc.verify_chain(&proc.head()));
     }
 
     #[test]
