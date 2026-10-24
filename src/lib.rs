@@ -51,7 +51,8 @@
 //! let mut proc = Procedure::new(42);
 //! use alice_legal::procedure::StepKind;
 //! proc.add_step(StepKind::Application, "citizen-001", "permit application", 1_000_000);
-//! assert!(proc.verify_chain());
+//! let head = proc.head(); // keep outside the steps (store or sign it)
+//! assert!(proc.verify_chain(&head));
 //!
 //! // Record to audit log
 //! let mut log = AuditLog::new();
