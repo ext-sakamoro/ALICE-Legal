@@ -5,11 +5,11 @@ Deterministic legal tree compilation, contract execution, and administrative pro
 ## Features
 
 - **Statute AST compilation** — natural language laws compiled into a deterministic clause tree with six clause kinds (Obligation, Prohibition, Permission, Definition, Penalty, Exception)
-- **Tamper-evident procedure log** — each step in an administrative procedure chains to the previous via FNV-1a hash, enabling offline integrity verification with `verify_chain()`
+- **Tamper-evident procedure log** — each step in an administrative procedure chains to the previous via its v2 identifier (LawIdHasher v2, 32 bytes), enabling offline integrity verification with `verify_chain()`
 - **Smart contract execution** — lifecycle management (Draft → Active → Fulfilled / Breached / Terminated / Expired) with `i128` fixed-point arithmetic for all monetary amounts
 - **Append-only audit log** — every significant legal event is recorded with actor hash, content hash, and Unix nanosecond timestamp
 - **O(1) lookups via HashMap indices** — `StatuteTree::find_clause`, `StatuteTree::children_of`, and `AuditLog::entries_for_entity` use internal `HashMap` indices instead of linear scans
-- **FNV-1a hashing throughout** — a single canonical implementation in `hash_utils` keeps all content and identity fields tamper-detectable without storing raw strings
+- **LawIdHasher v2 identifiers throughout** — every content and identity field is the 32-byte v2 identifier (ALICE-Zip `law_id`) of a kind, `LEGAL_SEMANTICS_ID` and the typed values, defined once in `law_id`
 - **Zero external dependencies** — `[dependencies]` is empty; the crate compiles on stable Rust with no network access
 - **91 unit tests** across all five modules
 
@@ -17,7 +17,7 @@ Deterministic legal tree compilation, contract execution, and administrative pro
 
 | Module | Primary Types | Responsibility |
 |---|---|---|
-| `hash_utils` | `fnv1a(data: &[u8]) -> u64` | Shared FNV-1a 64-bit hash used by every other module |
+| `law_id` | `Digest`, `LEGAL_SEMANTICS_ID`, `text`, `data`, `hasher` | Record identifiers (LawIdHasher v2, 32 bytes) used by every other module |
 | `statute` | `StatuteTree`, `Clause`, `ClauseKind`, `StatuteId` | Build and query deterministic legal ASTs; O(1) clause and children lookups |
 | `contract` | `Contract`, `Obligation`, `Condition`, `ContractStatus`, `ContractId`, `PartyId` | Create contracts, add obligations and conditions, drive lifecycle, sum fixed-point amounts |
 | `procedure` | `Procedure`, `ProcedureStep`, `StepKind`, `ProcedureStatus`, `ProcedureId` | Append-only administrative event stream with hash-chain integrity |
@@ -113,13 +113,10 @@ assert!(log.verify_sequence());
 
 | Optimization | Detail |
 |---|---|
-| FNV-1a hash | `#[inline(always)]`, branchless byte loop, zero allocation; well-known test vectors verified in tests |
 | O(1) clause lookup | `StatuteTree` maintains a `HashMap<clause_id, Vec_index>` updated on every `add_clause` call |
 | O(1) children lookup | `StatuteTree` maintains a `HashMap<parent_id, Vec<Vec_index>>` updated on every `add_clause` call |
 | O(1) audit entity filter | `AuditLog` maintains a `HashMap<entity_id, Vec<index>>` updated on every `append` call |
 | i128 fixed-point | All monetary amounts use `i128` ticks; no `f32`/`f64` anywhere in the execution path |
-| Zero allocation in hash | `fnv1a` operates on a borrowed `&[u8]` slice; no intermediate `String` or `Vec` is allocated |
-| Procedure chain buffer | `verify_chain` reuses a fixed `[u8; 16]` stack buffer per step; no heap allocation in the loop |
 
 ## Release Profile
 

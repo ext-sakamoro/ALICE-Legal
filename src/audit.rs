@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// The category of legal event recorded in the audit log.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,12 +39,12 @@ pub struct AuditEntry {
     pub kind: AuditEventKind,
     /// The numeric ID of the statute, contract, or procedure affected.
     pub entity_id: u64,
-    /// FNV-1a hash of the actor's identity string.
-    pub actor_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the actor's identity string.
+    pub actor_hash: Digest,
     /// When the event occurred, in Unix nanoseconds.
     pub timestamp_ns: u64,
-    /// FNV-1a hash of the event's content/payload string.
-    pub content_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the event's content/payload string.
+    pub content_hash: Digest,
 }
 
 /// Append-only, sequenced audit log for all legal operations.
@@ -79,8 +79,8 @@ impl AuditLog {
     ///
     /// * `kind` — Category of the legal event.
     /// * `entity_id` — Numeric ID of the affected statute, contract, or procedure.
-    /// * `actor` — Identity of the initiating party; stored as FNV-1a hash.
-    /// * `content` — Human-readable event description; stored as FNV-1a hash.
+    /// * `actor` — Identity of the initiating party; stored as its v2 identifier.
+    /// * `content` — Human-readable event description; stored as its v2 identifier.
     /// * `timestamp_ns` — Event time in Unix nanoseconds.
     pub fn append(
         &mut self,
@@ -97,9 +97,9 @@ impl AuditLog {
             sequence: seq,
             kind,
             entity_id,
-            actor_hash: fnv1a(actor.as_bytes()),
+            actor_hash: law_id::text("alice-legal/audit-entry/actor/v1", actor),
             timestamp_ns,
-            content_hash: fnv1a(content.as_bytes()),
+            content_hash: law_id::text("alice-legal/audit-entry/content/v1", content),
         });
         // Update the O(1) entity index.
         self.entity_index.entry(entity_id).or_default().push(idx);
@@ -287,7 +287,7 @@ mod tests {
             "Civil Code enacted",
             0,
         );
-        assert_ne!(log.entries[0].content_hash, 0);
+        assert_ne!(log.entries[0].content_hash, crate::law_id::ZERO);
     }
 
     #[test]
@@ -300,7 +300,7 @@ mod tests {
             "contract created",
             0,
         );
-        assert_ne!(log.entries[0].actor_hash, 0);
+        assert_ne!(log.entries[0].actor_hash, crate::law_id::ZERO);
     }
 
     #[test]

@@ -32,7 +32,7 @@ fn the_two_inputs_differ_and_collide_under_fnv1a_64() {
 #[test]
 fn an_oracle_response_for_one_payload_does_not_verify_another() {
     let response = OracleResponse {
-        oracle_id: 1,
+        oracle_id: [1; 32],
         verdict: OracleVerdict::Satisfied,
         timestamp_ns: 1,
         data_hash: alice_legal::oracle::compute_data_hash(A.as_bytes()),
@@ -40,7 +40,10 @@ fn an_oracle_response_for_one_payload_does_not_verify_another() {
         condition_index: 0,
     };
     assert!(OracleRegistry::verify_response(&response, A.as_bytes()));
-    assert!(!OracleRegistry::verify_response(&response, B.as_bytes()), "payload B verified a response made over payload A");
+    assert!(
+        !OracleRegistry::verify_response(&response, B.as_bytes()),
+        "payload B verified a response made over payload A"
+    );
 }
 
 #[test]
@@ -90,8 +93,14 @@ fn contract_conditions_with_different_text_get_different_hashes() {
     let mut c = Contract::new(1, &[1, 2], 0);
     c.add_condition(A, "evaluator");
     c.add_condition(B, "evaluator");
-    assert_ne!(c.conditions[0].description_hash, c.conditions[1].description_hash);
+    assert_ne!(
+        c.conditions[0].description_hash,
+        c.conditions[1].description_hash
+    );
     c.add_condition("same", A);
     c.add_condition("same", B);
-    assert_ne!(c.conditions[2].evaluator_hash, c.conditions[3].evaluator_hash);
+    assert_ne!(
+        c.conditions[2].evaluator_hash,
+        c.conditions[3].evaluator_hash
+    );
 }

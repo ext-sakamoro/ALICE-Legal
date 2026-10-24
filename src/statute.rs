@@ -1,7 +1,7 @@
 //! Legal statute representation as a deterministic AST-based legal tree.
 //!
 //! Statutes are compiled into a tree of [`Clause`] nodes identified by
-//! auto-incrementing IDs. Content is stored as FNV-1a hashes, keeping the
+//! auto-incrementing IDs. Content is stored as v2 identifiers (32 bytes), keeping the
 //! structure lightweight and tamper-detectable.
 //!
 //! Two internal `HashMap` indices are maintained on every [`StatuteTree`] to
@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// Unique identifier for a statute.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -44,8 +44,8 @@ pub struct Clause {
     pub kind: ClauseKind,
     /// Optional parent clause id for nested structures.
     pub parent_id: Option<u64>,
-    /// FNV-1a hash of the clause's natural-language content.
-    pub content_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the clause's natural-language content.
+    pub content_hash: Digest,
     /// Unix-epoch nanosecond timestamp at which this clause becomes effective.
     pub effective_from_ns: u64,
     /// Optional expiry timestamp (exclusive). `None` means no expiry.
@@ -61,8 +61,8 @@ pub struct Clause {
 pub struct StatuteTree {
     /// The statute's unique identifier.
     pub id: StatuteId,
-    /// FNV-1a hash of the statute's title string.
-    pub title_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the statute's title string.
+    pub title_hash: Digest,
     /// All clauses in document order.
     pub clauses: Vec<Clause>,
     /// Monotonically increasing version counter; incremented on each amendment.
@@ -81,12 +81,12 @@ impl StatuteTree {
     /// # Arguments
     ///
     /// * `id` — Numeric statute identifier.
-    /// * `title` — Human-readable title; stored as FNV-1a hash.
+    /// * `title` — Human-readable title; stored as its v2 identifier.
     #[must_use]
     pub fn new(id: u64, title: &str) -> Self {
         Self {
             id: StatuteId(id),
-            title_hash: fnv1a(title.as_bytes()),
+            title_hash: law_id::text("alice-legal/statute/title/v1", title),
             clauses: Vec::new(),
             version: 1,
             next_clause_id: 1,
@@ -100,7 +100,7 @@ impl StatuteTree {
     /// # Arguments
     ///
     /// * `kind` — Legal nature of the clause.
-    /// * `content` — Natural-language text; stored as FNV-1a hash.
+    /// * `content` — Natural-language text; stored as its v2 identifier.
     /// * `parent_id` — Optional parent clause for nesting.
     /// * `effective_from_ns` — Nanosecond timestamp when the clause takes effect.
     pub fn add_clause(
@@ -117,7 +117,7 @@ impl StatuteTree {
             id,
             kind,
             parent_id,
-            content_hash: fnv1a(content.as_bytes()),
+            content_hash: law_id::text("alice-legal/statute/clause-content/v1", content),
             effective_from_ns,
             expires_ns: None,
         });
@@ -296,7 +296,7 @@ mod tests {
     #[test]
     fn test_title_hash_nonzero() {
         let tree = StatuteTree::new(10, "Commercial Code");
-        assert_ne!(tree.title_hash, 0);
+        assert_ne!(tree.title_hash, crate::law_id::ZERO);
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
         let mut tree = StatuteTree::new(35, "Hash Nonzero Test");
         let id = tree.add_clause(ClauseKind::Exception, "carved-out case", None, 0);
         let clause = tree.find_clause(id).unwrap();
-        assert_ne!(clause.content_hash, 0);
+        assert_ne!(clause.content_hash, crate::law_id::ZERO);
     }
 
     #[test]

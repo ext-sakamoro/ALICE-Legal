@@ -4,7 +4,7 @@
 //! step's `content_hash` XOR `prev_hash`. This allows [`Procedure::verify_chain`]
 //! to detect any post-hoc modification without an external database.
 
-use crate::hash_utils::fnv1a;
+use crate::law_id::{self, Digest};
 
 /// Unique identifier for an administrative procedure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -36,17 +36,17 @@ pub struct ProcedureStep {
     pub sequence: u32,
     /// The kind of administrative action taken.
     pub kind: StepKind,
-    /// FNV-1a hash of the actor's identity string.
-    pub actor_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the actor's identity string.
+    pub actor_hash: Digest,
     /// When this step occurred, in Unix nanoseconds.
     pub timestamp_ns: u64,
-    /// FNV-1a hash of the step's content/payload string.
-    pub content_hash: u64,
+    /// v2 identifier ([`crate::law_id`]) of the step's content/payload string.
+    pub content_hash: Digest,
     /// Chain hash linking to the previous step for tamper detection.
     ///
-    /// Computed as `fnv1a( prev.content_hash.to_le_bytes() ++ prev.prev_hash.to_le_bytes() )`
-    /// for all steps except the first (where it is `0`).
-    pub prev_hash: u64,
+    /// The v2 identifier of the previous step's `content_hash` and `prev_hash` for all steps except
+    /// the first (where it is [`law_id::ZERO`]).
+    pub prev_hash: Digest,
 }
 
 /// The overall lifecycle state of an administrative procedure.
@@ -75,6 +75,14 @@ pub struct Procedure {
     pub status: ProcedureStatus,
 }
 
+/// The link a step carries to the step before it: that step's content and its own link
+fn link(prev: &ProcedureStep) -> Digest {
+    law_id::hasher("alice-legal/procedure-step/link/v1")
+        .id(&prev.content_hash)
+        .id(&prev.prev_hash)
+        .finish()
+}
+
 impl Procedure {
     /// Create a new, empty procedure in [`ProcedureStatus::Pending`] state.
     #[must_use]
@@ -99,15 +107,10 @@ impl Procedure {
     /// - Other kinds → [`ProcedureStatus::InProgress`] (unless already terminal)
     pub fn add_step(&mut self, kind: StepKind, actor: &str, content: &str, timestamp_ns: u64) {
         let sequence = self.steps.len() as u32;
-        let content_hash = fnv1a(content.as_bytes());
-        let actor_hash = fnv1a(actor.as_bytes());
+        let content_hash = law_id::text("alice-legal/procedure-step/content/v1", content);
+        let actor_hash = law_id::text("alice-legal/procedure-step/actor/v1", actor);
 
-        let prev_hash = self.steps.last().map_or(0u64, |prev| {
-            let mut buf = [0u8; 16];
-            buf[..8].copy_from_slice(&prev.content_hash.to_le_bytes());
-            buf[8..].copy_from_slice(&prev.prev_hash.to_le_bytes());
-            fnv1a(&buf)
-        });
+        let prev_hash = self.steps.last().map_or(law_id::ZERO, link);
 
         self.steps.push(ProcedureStep {
             sequence,
@@ -143,10 +146,7 @@ impl Procedure {
             let prev = &self.steps[i - 1];
             let current = &self.steps[i];
 
-            let mut buf = [0u8; 16];
-            buf[..8].copy_from_slice(&prev.content_hash.to_le_bytes());
-            buf[8..].copy_from_slice(&prev.prev_hash.to_le_bytes());
-            let expected = fnv1a(&buf);
+            let expected = link(prev);
 
             if current.prev_hash != expected {
                 return false;
@@ -220,7 +220,7 @@ mod tests {
 
         assert!(proc.verify_chain());
         // First step always has prev_hash == 0
-        assert_eq!(proc.steps[0].prev_hash, 0);
+        assert_eq!(proc.steps[0].prev_hash, crate::law_id::ZERO);
     }
 
     #[test]
@@ -233,7 +233,7 @@ mod tests {
         assert!(proc.verify_chain());
 
         // Tamper with the middle step's content_hash
-        proc.steps[1].content_hash ^= 0xDEAD_BEEF_CAFE_1234;
+        proc.steps[1].content_hash[0] ^= 0x01;
 
         assert!(!proc.verify_chain());
     }
@@ -280,21 +280,21 @@ mod tests {
     fn test_first_step_prev_hash_is_zero() {
         let mut proc = Procedure::new(10);
         proc.add_step(StepKind::Application, "citizen", "submit", NS);
-        assert_eq!(proc.steps[0].prev_hash, 0);
+        assert_eq!(proc.steps[0].prev_hash, crate::law_id::ZERO);
     }
 
     #[test]
     fn test_content_hash_nonzero_for_step() {
         let mut proc = Procedure::new(11);
         proc.add_step(StepKind::Review, "officer", "reviewed all documents", NS);
-        assert_ne!(proc.steps[0].content_hash, 0);
+        assert_ne!(proc.steps[0].content_hash, crate::law_id::ZERO);
     }
 
     #[test]
     fn test_actor_hash_nonzero_for_step() {
         let mut proc = Procedure::new(12);
         proc.add_step(StepKind::Application, "applicant-007", "form submitted", NS);
-        assert_ne!(proc.steps[0].actor_hash, 0);
+        assert_ne!(proc.steps[0].actor_hash, crate::law_id::ZERO);
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod tests {
         assert!(proc.verify_chain());
 
         // Tamper with the first step's content_hash: the second step's prev_hash is now wrong
-        proc.steps[0].content_hash ^= 0x1;
+        proc.steps[0].content_hash[0] ^= 0x01;
         assert!(!proc.verify_chain());
     }
 
@@ -392,7 +392,7 @@ mod tests {
         proc.reject("officer", "incomplete documentation", 2 * NS);
         let last = proc.latest_step().unwrap();
         // content_hash must be nonzero (reason text was hashed)
-        assert_ne!(last.content_hash, 0);
+        assert_ne!(last.content_hash, crate::law_id::ZERO);
         assert_eq!(last.kind, StepKind::Rejection);
     }
 
@@ -402,7 +402,7 @@ mod tests {
         proc.add_step(StepKind::Application, "user", "apply", NS);
         proc.complete("director", 2 * NS);
         let last = proc.latest_step().unwrap();
-        assert_ne!(last.content_hash, 0);
+        assert_ne!(last.content_hash, crate::law_id::ZERO);
         assert_eq!(last.kind, StepKind::Completion);
     }
 
