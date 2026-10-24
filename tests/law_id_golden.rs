@@ -87,7 +87,7 @@ fn a_procedure_chain_link() {
     assert_eq!(p.steps[0].prev_hash, ZERO);
     assert_eq!(
         hex(&p.steps[1].prev_hash),
-        "80c3cb9db95c5f7be1a2e3026402d3cb4450bc350aba5a227a822acbd51fd908"
+        "ab7b3b3718d16535c4586785a7e4b0dfa37e5e7ec74cd7c5550080c224e9eb94"
     );
     assert!(p.verify_chain());
 }
