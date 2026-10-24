@@ -22,7 +22,7 @@ fn the_semantics_identifier() {
 
 #[test]
 fn an_audit_actor() {
-    let mut log = AuditLog::new();
+    let mut log = AuditLog::new(1);
     log.append(AuditEventKind::StatuteCreated, 1, "alice", "content", 1);
     assert_eq!(
         hex(&log.entries[0].actor_hash),
@@ -99,4 +99,30 @@ fn a_procedure_chain_link() {
         "d88be8dcd475bb83e48a9a5a1dc547d8b68b8b8ff308db8e1d1542ade8c00ae4"
     );
     assert!(p.verify_chain(&head));
+}
+
+#[test]
+fn an_audit_chain() {
+    let mut log = AuditLog::new(1);
+    // an empty log's head: the first link (log id 1, sequence 0)
+    assert_eq!(
+        hex(&log.head()),
+        "c6eb34b549ddd7cc292327f10f032fa343455322b65bf0c2e938223aa27bc3ab"
+    );
+    log.append(AuditEventKind::DocumentAnalyzed, 1, "engine", "doc", 10);
+    log.append(AuditEventKind::TemplateCompiled, 2, "engine", "nda", 20);
+    assert_eq!(
+        hex(&log.entries[0].prev_hash),
+        "c6eb34b549ddd7cc292327f10f032fa343455322b65bf0c2e938223aa27bc3ab"
+    );
+    assert_eq!(
+        hex(&log.entries[1].prev_hash),
+        "2529a0f11011c0d84f08054d619e2aed17579128cb3d8a2aca3491296d368233"
+    );
+    let head = log.head();
+    assert_eq!(
+        hex(&head),
+        "d08ecfbe9fff862cccb86484b324912d93361f8d868245452acf5a92b943b129"
+    );
+    assert!(log.verify_chain(&head));
 }

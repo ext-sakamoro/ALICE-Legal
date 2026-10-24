@@ -7,7 +7,7 @@ Deterministic legal tree compilation, contract execution, and administrative pro
 - **Statute AST compilation** — natural language laws compiled into a deterministic clause tree with six clause kinds (Obligation, Prohibition, Permission, Definition, Penalty, Exception)
 - **Tamper-evident procedure log** — each step in an administrative procedure chains to the previous via its v2 identifier (LawIdHasher v2, 32 bytes), enabling offline integrity verification with `verify_chain()`
 - **Smart contract execution** — lifecycle management (Draft → Active → Fulfilled / Breached / Terminated / Expired) with `i128` fixed-point arithmetic for all monetary amounts
-- **Append-only audit log** — every significant legal event is recorded with actor hash, content hash, and Unix nanosecond timestamp
+- **Chained audit log** — every significant legal event is recorded with actor and content identifiers and a Unix nanosecond timestamp; each entry links to the one before it, and `verify_chain` checks the log against a head kept outside it
 - **O(1) lookups via HashMap indices** — `StatuteTree::find_clause`, `StatuteTree::children_of`, and `AuditLog::entries_for_entity` use internal `HashMap` indices instead of linear scans
 - **LawIdHasher v2 identifiers throughout** — every content and identity field is the 32-byte v2 identifier (ALICE-Zip `law_id`) of a kind, `LEGAL_SEMANTICS_ID` and the typed values, defined once in `law_id`
 - **Zero external dependencies** — `[dependencies]` is empty; the crate compiles on stable Rust with no network access
@@ -21,7 +21,7 @@ Deterministic legal tree compilation, contract execution, and administrative pro
 | `statute` | `StatuteTree`, `Clause`, `ClauseKind`, `StatuteId` | Build and query deterministic legal ASTs; O(1) clause and children lookups |
 | `contract` | `Contract`, `Obligation`, `Condition`, `ContractStatus`, `ContractId`, `PartyId` | Create contracts, add obligations and conditions, drive lifecycle, sum fixed-point amounts |
 | `procedure` | `Procedure`, `ProcedureStep`, `StepKind`, `ProcedureStatus`, `ProcedureId` | Append-only administrative event stream with hash-chain integrity |
-| `audit` | `AuditLog`, `AuditEntry`, `AuditEventKind` | Sequenced, append-only compliance log with O(1) entity filtering and time-range queries |
+| `audit` | `AuditLog`, `AuditEntry`, `AuditEventKind` | Sequenced compliance log chained entry to entry (`head`, `verify_chain`), with O(1) entity filtering and time-range queries |
 
 ## Quick Start
 
@@ -96,7 +96,7 @@ assert!(proc.verify_chain(&head)); // tamper detection
 ```rust
 use alice_legal::audit::{AuditLog, AuditEventKind};
 
-let mut log = AuditLog::new();
+let mut log = AuditLog::new(1);
 
 log.append(AuditEventKind::StatuteCreated,  1,   "admin", "Civil Code Article 1", 0);
 log.append(AuditEventKind::ContractCreated, 100, "alice", "sales contract",        1_000_000_000);

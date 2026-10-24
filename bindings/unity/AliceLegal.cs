@@ -55,13 +55,15 @@ namespace Alice.Legal
         [DllImport(Lib)] public static extern void alice_procedure_destroy(IntPtr proc);
 
         // AuditLog (4)
-        [DllImport(Lib)] public static extern IntPtr alice_audit_new();
+        [DllImport(Lib)] public static extern IntPtr alice_audit_new(ulong logId);
         [DllImport(Lib)] public static extern ulong alice_audit_append(
             IntPtr log, byte kind, ulong entityId,
             byte[] actor, uint actorLen,
             byte[] content, uint contentLen,
             ulong timestampNs);
         [DllImport(Lib)] public static extern uint alice_audit_len(IntPtr log);
+        [DllImport(Lib)] public static extern byte alice_audit_head(IntPtr log, byte[] out32);
+        [DllImport(Lib)] public static extern byte alice_audit_verify_chain(IntPtr log, byte[] head32);
         [DllImport(Lib)] public static extern void alice_audit_destroy(IntPtr log);
     }
 
@@ -157,9 +159,9 @@ namespace Alice.Legal
     {
         private IntPtr _ptr;
 
-        public AliceAuditLog()
+        public AliceAuditLog(ulong logId)
         {
-            _ptr = Native.alice_audit_new();
+            _ptr = Native.alice_audit_new(logId);
         }
 
         public ulong Append(byte kind, ulong entityId, string actor, string content, ulong timestampNs)
@@ -174,6 +176,8 @@ namespace Alice.Legal
         }
 
         public uint Len => Native.alice_audit_len(_ptr);
+        public byte[] Head() { var h = new byte[32]; Native.alice_audit_head(_ptr, h); return h; }
+        public bool VerifyChain(byte[] head) => head != null && head.Length == 32 && Native.alice_audit_verify_chain(_ptr, head) != 0;
 
         public void Dispose()
         {

@@ -5,6 +5,9 @@ All notable changes to ALICE-Legal will be documented in this file.
 ## [Unreleased]
 
 ### 破壊的変更
+- 監査の log を entry ごとに連鎖させた: `AuditEntry::prev_hash` (log id と前の entry の記録全体の v2 識別子、最初の entry は log id と sequence 0 の識別子)、`AuditLog::head` と `AuditLog::verify_chain(&head)` を追加 `AuditLog::new()` は `AuditLog::new(log_id)` に変わり、`Default` を外した 検出するもの・しないもの (log の外に持った head に対してだけ切り詰めと延長を検出する) は `audit` の module doc に記載
+- `AuditEventKind` に `DocumentAnalyzed` / `TemplateCompiled` を追加 (網羅の match は新しい kind を扱う必要がある)
+- FFI: `alice_audit_new(log_id)` に変更し、`alice_audit_head` / `alice_audit_verify_chain` を追加、kind の 8 / 9 に新しい kind UE5 / Unity binding も同じ
 - 記録の識別子を FNV-1a 64 bit から LawIdHasher v2 (ALICE-Zip `law_id`、32 byte) に変更 audit / procedure の actor・content・prev、dispute の reason、oracle の id・name・data、penalty の record、contract の content・condition の description と evaluator、statute の title と clause の content が `[u8; 32]` (`law_id::Digest`) になる `OracleRegistry::register` は `Digest` を返し、`find_oracle` / `deactivate` と `OracleResponse::oracle_id` も `Digest` を取る
 - `hash_utils` (`fnv1a`) を削除し、`law_id` (`Digest` / `ZERO` / `LEGAL_SEMANTICS_ID` / `hasher` / `text` / `data`) を追加
 - 手続きの連鎖の link は手続きの id と前の段の記録全体 (sequence・kind・actor・timestamp・content・link) の v2 識別子、最初の段の link は手続きの id と sequence 0 の v2 識別子
@@ -12,6 +15,7 @@ All notable changes to ALICE-Legal will be documented in this file.
 - FFI: `alice_procedure_verify_chain(proc, head)` (32 byte の head を取る) に変更し、`alice_procedure_head(proc, out)` を追加 UE5 / Unity binding も同じ
 
 ### Added
+- 試験 `tests/audit_chain.rs` (各 entry の書き換え・削除・入れ替え・切り詰め・延長・別の log からの継ぎ合わせを段の外の head で検出し、自分の head に対しては切り詰めを検出できないこと) と `tests/law_id_golden.rs` の監査の連鎖の識別子
 - 試験 `tests/identifier_collision.rs` (FNV-1a 64 bit で衝突する 2 つの文字列で、各記録の識別子が別になることと oracle の応答の照合を確かめる) 、`tests/law_id_golden.rs` (ALICE-Zip の独立実装で計算した識別子) と `tests/procedure_chain_record.rs` (各段の各 field の書き換え、段の削除・入れ替え・切り詰め・延長、別の手続きへの移動で連鎖の照合が失敗する)
 - 依存 `alice-zip` (git)、`deny.toml` の allow-git に ALICE-DetMath と ALICE-Zip
 

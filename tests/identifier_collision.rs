@@ -56,7 +56,7 @@ fn two_oracles_with_different_names_get_different_ids() {
 
 #[test]
 fn audit_entries_with_different_content_get_different_hashes() {
-    let mut log = AuditLog::new();
+    let mut log = AuditLog::new(1);
     log.append(AuditEventKind::StatuteCreated, 1, "actor", A, 1);
     log.append(AuditEventKind::StatuteCreated, 1, "actor", B, 2);
     assert_ne!(log.entries[0].content_hash, log.entries[1].content_hash);

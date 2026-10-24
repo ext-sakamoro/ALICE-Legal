@@ -44,11 +44,13 @@ uint32_t alice_procedure_step_count(const void* proc);
 void     alice_procedure_destroy(void* proc);
 
 // AuditLog (4)
-void*    alice_audit_new();
+void*    alice_audit_new(uint64_t log_id);
 uint64_t alice_audit_append(void* log, uint8_t kind, uint64_t entity_id,
              const uint8_t* actor, uint32_t actor_len,
              const uint8_t* content, uint32_t content_len, uint64_t timestamp_ns);
 uint32_t alice_audit_len(const void* log);
+uint8_t  alice_audit_head(const void* log, uint8_t* out /* 32 bytes */);
+uint8_t  alice_audit_verify_chain(const void* log, const uint8_t* head /* 32 bytes */);
 void     alice_audit_destroy(void* log);
 
 } // extern "C"
@@ -142,7 +144,7 @@ public:
 class AliceAuditLog {
     void* ptr_;
 public:
-    AliceAuditLog() : ptr_(alice_audit_new()) {}
+    explicit AliceAuditLog(uint64_t log_id) : ptr_(alice_audit_new(log_id)) {}
 
     ~AliceAuditLog() { if (ptr_) alice_audit_destroy(ptr_); }
 
@@ -162,4 +164,6 @@ public:
     }
 
     uint32_t Len() const { return alice_audit_len(ptr_); }
+    std::array<uint8_t, 32> Head() const { std::array<uint8_t, 32> h{}; alice_audit_head(ptr_, h.data()); return h; }
+    bool VerifyChain(const std::array<uint8_t, 32>& head) const { return alice_audit_verify_chain(ptr_, head.data()) != 0; }
 };

@@ -55,7 +55,7 @@
 //! assert!(proc.verify_chain(&head));
 //!
 //! // Record to audit log
-//! let mut log = AuditLog::new();
+//! let mut log = AuditLog::new(1);
 //! log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code Article 1", 0);
 //! assert_eq!(log.len(), 1);
 //! ```

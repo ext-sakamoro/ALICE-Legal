@@ -1,9 +1,29 @@
-//! Immutable audit trail for all legal operations.
+//! Audit trail for all legal operations, chained entry to entry.
 //!
 //! Every significant event in the ALICE-Legal system (statute creation,
-//! contract fulfilment, procedure completion, etc.) should be recorded via
-//! [`AuditLog::append`]. The log is append-only and exposes read-only query
-//! helpers for compliance reporting.
+//! contract fulfilment, procedure completion, document analysis, etc.) should be
+//! recorded via [`AuditLog::append`]. Each [`AuditEntry`] carries a link
+//! (`prev_hash`): the v2 identifier of the log id and the whole record of the entry
+//! before it (sequence, kind, entity, actor, timestamp, content, its own link). The
+//! first entry's link is the identifier of the log id and sequence 0.
+//! [`AuditLog::head`] is the link the next entry would carry.
+//!
+//! # What [`AuditLog::verify_chain`] guarantees
+//!
+//! Given a head recorded earlier and kept outside the log (stored or signed by the
+//! caller), `verify_chain(&head)` fails when, since then:
+//!
+//! - any field of any entry was changed;
+//! - an entry was removed, inserted or moved, or the log was truncated or extended;
+//! - entries were spliced in from another log (another log id).
+//!
+//! It does **not**:
+//!
+//! - detect truncation or extension against the head recomputed from the log
+//!   itself: a truncated log verifies against its own head, so the head must be kept
+//!   outside the log;
+//! - protect the head: whoever can replace the stored head can rewrite the log;
+//! - keep the actor or content text: only their identifiers are stored.
 
 use std::collections::HashMap;
 
@@ -28,6 +48,10 @@ pub enum AuditEventKind {
     ProcedureCompleted,
     /// An administrative procedure was rejected.
     ProcedureRejected,
+    /// A document was analyzed (its clauses, risk and issues computed).
+    DocumentAnalyzed,
+    /// A document was compiled from a template.
+    TemplateCompiled,
 }
 
 /// A single, immutable record in the audit log.
@@ -45,6 +69,48 @@ pub struct AuditEntry {
     pub timestamp_ns: u64,
     /// v2 identifier ([`crate::law_id`]) of the event's content/payload string.
     pub content_hash: Digest,
+    /// Link to the entry before it: the v2 identifier of the log id and that entry's
+    /// whole record (for the first entry, of the log id and sequence 0).
+    pub prev_hash: Digest,
+}
+
+/// The name of an event kind in the chain link
+const fn kind_tag(kind: AuditEventKind) -> &'static str {
+    match kind {
+        AuditEventKind::StatuteCreated => "statute-created",
+        AuditEventKind::StatuteAmended => "statute-amended",
+        AuditEventKind::ContractCreated => "contract-created",
+        AuditEventKind::ContractFulfilled => "contract-fulfilled",
+        AuditEventKind::ContractBreached => "contract-breached",
+        AuditEventKind::ProcedureStarted => "procedure-started",
+        AuditEventKind::ProcedureCompleted => "procedure-completed",
+        AuditEventKind::ProcedureRejected => "procedure-rejected",
+        AuditEventKind::DocumentAnalyzed => "document-analyzed",
+        AuditEventKind::TemplateCompiled => "template-compiled",
+    }
+}
+
+/// The link the first entry of log `log_id` carries: the log id and sequence 0
+fn first_link(log_id: u64) -> Digest {
+    law_id::hasher("alice-legal/audit/first-link/v1")
+        .u64(log_id)
+        .u64(0)
+        .finish()
+}
+
+/// The link an entry carries to the entry before it: the log id and that entry's whole
+/// record, each as a typed value
+fn link(log_id: u64, prev: &AuditEntry) -> Digest {
+    law_id::hasher("alice-legal/audit/link/v1")
+        .u64(log_id)
+        .u64(prev.sequence)
+        .str(kind_tag(prev.kind))
+        .u64(prev.entity_id)
+        .id(&prev.actor_hash)
+        .u64(prev.timestamp_ns)
+        .id(&prev.content_hash)
+        .id(&prev.prev_hash)
+        .finish()
 }
 
 /// Append-only, sequenced audit log for all legal operations.
@@ -54,6 +120,9 @@ pub struct AuditEntry {
 /// instead of an O(n) linear scan.
 #[derive(Debug, Clone)]
 pub struct AuditLog {
+    /// The identifier of this log, bound into every link (entries of another log do not
+    /// verify here).
+    pub log_id: u64,
     /// All recorded entries in append order.
     pub entries: Vec<AuditEntry>,
     /// The sequence number that will be assigned to the next entry.
@@ -63,10 +132,11 @@ pub struct AuditLog {
 }
 
 impl AuditLog {
-    /// Create an empty audit log.
+    /// Create an empty audit log with the identifier `log_id`.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(log_id: u64) -> Self {
         Self {
+            log_id,
             entries: Vec::new(),
             next_sequence: 0,
             entity_index: HashMap::new(),
@@ -93,6 +163,7 @@ impl AuditLog {
         let seq = self.next_sequence;
         self.next_sequence += 1;
         let idx = self.entries.len();
+        let prev_hash = self.head();
         self.entries.push(AuditEntry {
             sequence: seq,
             kind,
@@ -100,6 +171,7 @@ impl AuditLog {
             actor_hash: law_id::text("alice-legal/audit-entry/actor/v1", actor),
             timestamp_ns,
             content_hash: law_id::text("alice-legal/audit-entry/content/v1", content),
+            prev_hash,
         });
         // Update the O(1) entity index.
         self.entity_index.entry(entity_id).or_default().push(idx);
@@ -140,6 +212,33 @@ impl AuditLog {
         self.entries.is_empty()
     }
 
+    /// The link the next entry would carry: the link to the last entry's whole record, or
+    /// for an empty log the link of the log id and sequence 0
+    #[must_use]
+    pub fn head(&self) -> Digest {
+        self.entries
+            .last()
+            .map_or_else(|| first_link(self.log_id), |last| link(self.log_id, last))
+    }
+
+    /// Verify the chain against a head kept outside the log.
+    ///
+    /// Returns `true` when entry `i` has sequence `i`, every entry carries the link to the
+    /// one before it (the first, the link of the log id and sequence 0), and the head
+    /// recomputed from the last entry equals `expected_head`. What this does and does not
+    /// detect is listed in the module documentation.
+    #[must_use]
+    pub fn verify_chain(&self, expected_head: &Digest) -> bool {
+        let mut expected = first_link(self.log_id);
+        for (i, entry) in self.entries.iter().enumerate() {
+            if entry.sequence != i as u64 || entry.prev_hash != expected {
+                return false;
+            }
+            expected = link(self.log_id, entry);
+        }
+        expected == *expected_head
+    }
+
     /// Verify that sequence numbers are contiguous starting from 0.
     ///
     /// Returns `true` for an empty log or a log whose entries are numbered
@@ -155,12 +254,6 @@ impl AuditLog {
     }
 }
 
-impl Default for AuditLog {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_append_entries_and_verify_sequence() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         let s0 = log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code", 0);
         let s1 = log.append(
             AuditEventKind::ContractCreated,
@@ -195,7 +288,7 @@ mod tests {
 
     #[test]
     fn test_filter_by_entity_id() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(AuditEventKind::StatuteCreated, 1, "admin", "Civil Code", 0);
         log.append(
             AuditEventKind::ContractCreated,
@@ -232,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_filter_by_time_range() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         // Events at 0s, 5s, 10s, 15s, 20s
         for i in 0u64..5 {
             log.append(
@@ -254,7 +347,7 @@ mod tests {
 
     #[test]
     fn test_verify_contiguous_sequence() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         assert!(log.verify_sequence()); // empty log is valid
 
         log.append(AuditEventKind::ContractCreated, 1, "a", "c", 0);
@@ -269,7 +362,7 @@ mod tests {
 
     #[test]
     fn test_empty_log() {
-        let log = AuditLog::new();
+        let log = AuditLog::new(1);
         assert!(log.is_empty());
         assert_eq!(log.len(), 0);
         assert!(log.verify_sequence());
@@ -279,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_content_hash_nonzero() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(
             AuditEventKind::StatuteCreated,
             1,
@@ -292,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_actor_hash_nonzero() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(
             AuditEventKind::ContractCreated,
             10,
@@ -305,8 +398,8 @@ mod tests {
 
     #[test]
     fn test_content_hash_deterministic() {
-        let mut log1 = AuditLog::new();
-        let mut log2 = AuditLog::new();
+        let mut log1 = AuditLog::new(1);
+        let mut log2 = AuditLog::new(1);
         log1.append(
             AuditEventKind::ProcedureStarted,
             5,
@@ -326,7 +419,7 @@ mod tests {
 
     #[test]
     fn test_different_content_yields_different_hash() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(AuditEventKind::StatuteCreated, 1, "admin", "content A", 0);
         log.append(AuditEventKind::StatuteCreated, 1, "admin", "content B", 0);
         assert_ne!(log.entries[0].content_hash, log.entries[1].content_hash);
@@ -334,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_sequence_starts_at_zero() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         let seq = log.append(AuditEventKind::StatuteCreated, 1, "admin", "first", 0);
         assert_eq!(seq, 0);
         assert_eq!(log.entries[0].sequence, 0);
@@ -342,7 +435,7 @@ mod tests {
 
     #[test]
     fn test_next_sequence_increments_correctly() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         assert_eq!(log.next_sequence, 0);
         log.append(AuditEventKind::ContractCreated, 1, "a", "b", 0);
         assert_eq!(log.next_sequence, 1);
@@ -352,7 +445,7 @@ mod tests {
 
     #[test]
     fn test_entries_in_range_exclusive_upper_bound() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(AuditEventKind::StatuteCreated, 1, "a", "b", 10 * NS);
         log.append(AuditEventKind::StatuteCreated, 2, "a", "b", 20 * NS);
         // [10*NS, 20*NS) — only the first entry qualifies
@@ -363,22 +456,23 @@ mod tests {
 
     #[test]
     fn test_entries_in_range_empty_when_no_match() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(AuditEventKind::StatuteCreated, 1, "a", "b", 100 * NS);
         let range = log.entries_in_range(0, NS);
         assert!(range.is_empty());
     }
 
     #[test]
-    fn test_default_equals_new() {
-        let log = AuditLog::default();
+    fn test_new_is_empty_with_its_id() {
+        let log = AuditLog::new(7);
         assert!(log.is_empty());
         assert_eq!(log.next_sequence, 0);
+        assert_eq!(log.log_id, 7);
     }
 
     #[test]
     fn test_all_event_kinds_can_be_appended() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         let kinds = [
             AuditEventKind::StatuteCreated,
             AuditEventKind::StatuteAmended,
@@ -398,7 +492,7 @@ mod tests {
 
     #[test]
     fn test_entries_for_entity_multiple_events() {
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         let entity = 42u64;
         log.append(
             AuditEventKind::ContractCreated,
@@ -461,7 +555,7 @@ mod tests {
     #[test]
     fn test_entries_in_range_zero_width_and_inverted() {
         // from_ns == to_ns は空範囲（下限と上限が等しい）
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         log.append(AuditEventKind::StatuteCreated, 1, "admin", "event", 10 * NS);
         let empty = log.entries_in_range(10 * NS, 10 * NS);
         assert!(empty.is_empty(), "from==to は空範囲のはず");
@@ -474,7 +568,7 @@ mod tests {
     #[test]
     fn test_clone_produces_independent_copy() {
         // clone したログへの追記が元ログに影響しないこと
-        let mut original = AuditLog::new();
+        let mut original = AuditLog::new(1);
         original.append(AuditEventKind::ContractCreated, 1, "alice", "original", NS);
 
         let mut cloned = original.clone();
@@ -495,7 +589,7 @@ mod tests {
     #[test]
     fn test_large_number_of_entries_sequence_integrity() {
         // 大量エントリでもシーケンスが連続していること
-        let mut log = AuditLog::new();
+        let mut log = AuditLog::new(1);
         for i in 0u64..256 {
             log.append(
                 AuditEventKind::StatuteAmended,

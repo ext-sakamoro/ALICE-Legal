@@ -1,6 +1,6 @@
 //! C FFI for ALICE-Legal
 //!
-//! Provides 22 `extern "C"` functions for Unity / UE5 / native integration.
+//! Provides 24 `extern "C"` functions for Unity / UE5 / native integration.
 //!
 //! SPDX-License-Identifier: LicenseRef-Proprietary
 //! Author: Moroya Sakamoto
@@ -53,6 +53,8 @@ fn audit_kind_from_u8(v: u8) -> Option<AuditEventKind> {
         5 => Some(AuditEventKind::ProcedureStarted),
         6 => Some(AuditEventKind::ProcedureCompleted),
         7 => Some(AuditEventKind::ProcedureRejected),
+        8 => Some(AuditEventKind::DocumentAnalyzed),
+        9 => Some(AuditEventKind::TemplateCompiled),
         _ => None,
     }
 }
@@ -380,14 +382,14 @@ pub unsafe extern "C" fn alice_procedure_destroy(proc_ptr: *mut Procedure) {
 
 // ── AuditLog (4) ────────────────────────────────────────────────────
 
-/// 新しい `AuditLog` を作成する。
+/// log id `log_id` の新しい `AuditLog` を作成する。
 ///
 /// # Safety
 ///
 /// 戻り値は `alice_audit_destroy` で解放すること。
 #[no_mangle]
-pub unsafe extern "C" fn alice_audit_new() -> *mut AuditLog {
-    Box::into_raw(Box::new(AuditLog::new()))
+pub unsafe extern "C" fn alice_audit_new(log_id: u64) -> *mut AuditLog {
+    Box::into_raw(Box::new(AuditLog::new(log_id)))
 }
 
 /// 監査エントリを追加し、シーケンス番号を返す。
@@ -396,7 +398,7 @@ pub unsafe extern "C" fn alice_audit_new() -> *mut AuditLog {
 ///
 /// `log` は有効なポインタであること。
 /// `actor_ptr` / `content_ptr` は各 `_len` バイトの有効なUTF-8メモリであること。
-/// `kind`: StatuteCreated=0..ProcedureRejected=7
+/// `kind`: StatuteCreated=0..ProcedureRejected=7, DocumentAnalyzed=8, TemplateCompiled=9
 #[no_mangle]
 pub unsafe extern "C" fn alice_audit_append(
     log: *mut AuditLog,
@@ -431,6 +433,36 @@ pub unsafe extern "C" fn alice_audit_len(log: *const AuditLog) -> u32 {
         return 0;
     }
     (*log).len() as u32
+}
+
+/// 次の entry が持つ link (head、32 byte) を `out` に書く。書けた=1, null=0。
+///
+/// # Safety
+///
+/// `log` は有効なポインタ、`out` は 32 byte 書ける領域であること。
+#[no_mangle]
+pub unsafe extern "C" fn alice_audit_head(log: *const AuditLog, out: *mut u8) -> u8 {
+    if log.is_null() || out.is_null() {
+        return 0;
+    }
+    let head = (*log).head();
+    ptr::copy_nonoverlapping(head.as_ptr(), out, head.len());
+    1
+}
+
+/// 監査ログの外に持った head (32 byte) に対して連鎖を検証する。有効=1, 無効=0。
+///
+/// # Safety
+///
+/// `log` は有効なポインタ、`head` は 32 byte 読める領域であること。
+#[no_mangle]
+pub unsafe extern "C" fn alice_audit_verify_chain(log: *const AuditLog, head: *const u8) -> u8 {
+    if log.is_null() || head.is_null() {
+        return 0;
+    }
+    let mut expected = [0u8; 32];
+    ptr::copy_nonoverlapping(head, expected.as_mut_ptr(), expected.len());
+    u8::from((*log).verify_chain(&expected))
 }
 
 /// `AuditLog` を解放する。
@@ -532,7 +564,7 @@ mod tests {
     #[test]
     fn test_audit_lifecycle() {
         unsafe {
-            let log = alice_audit_new();
+            let log = alice_audit_new(1);
             assert!(!log.is_null());
 
             let actor = b"admin";
@@ -620,7 +652,7 @@ mod tests {
             assert_eq!(alice_procedure_step_count(proc), 0);
             alice_procedure_destroy(proc);
 
-            let log = alice_audit_new();
+            let log = alice_audit_new(1);
             // kind=255 は無効
             let seq = alice_audit_append(log, 255, 1, ptr::null(), 0, ptr::null(), 0, 0);
             assert_eq!(seq, u64::MAX);
@@ -684,7 +716,7 @@ mod tests {
     fn test_audit_all_valid_kinds_accepted() {
         // kind=0..=7 がすべて u64::MAX 以外のシーケンス番号を返すこと
         unsafe {
-            let log = alice_audit_new();
+            let log = alice_audit_new(1);
             let actor = b"admin";
             let content = b"event";
             for kind in 0u8..=7 {
