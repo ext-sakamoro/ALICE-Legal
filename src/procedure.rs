@@ -44,8 +44,9 @@ pub struct ProcedureStep {
     pub content_hash: Digest,
     /// Chain hash linking to the previous step for tamper detection.
     ///
-    /// The v2 identifier of the previous step's `content_hash` and `prev_hash` for all steps except
-    /// the first (where it is [`law_id::ZERO`]).
+    /// The v2 identifier of the previous step's whole record (`sequence`, `kind`, `actor_hash`,
+    /// `timestamp_ns`, `content_hash`, `prev_hash`) for all steps except the first (where it is
+    /// [`law_id::ZERO`]).
     pub prev_hash: Digest,
 }
 
@@ -75,9 +76,27 @@ pub struct Procedure {
     pub status: ProcedureStatus,
 }
 
-/// The link a step carries to the step before it: that step's content and its own link
+/// The name of a step kind in the chain link
+const fn kind_tag(kind: StepKind) -> &'static str {
+    match kind {
+        StepKind::Application => "application",
+        StepKind::Review => "review",
+        StepKind::Approval => "approval",
+        StepKind::Rejection => "rejection",
+        StepKind::Amendment => "amendment",
+        StepKind::Notification => "notification",
+        StepKind::Completion => "completion",
+    }
+}
+
+/// The link a step carries to the step before it: that step's whole record (sequence, kind,
+/// actor, timestamp, content and its own link), each as a typed value
 fn link(prev: &ProcedureStep) -> Digest {
     law_id::hasher("alice-legal/procedure-step/link/v1")
+        .u32(prev.sequence)
+        .str(kind_tag(prev.kind))
+        .id(&prev.actor_hash)
+        .u64(prev.timestamp_ns)
         .id(&prev.content_hash)
         .id(&prev.prev_hash)
         .finish()
