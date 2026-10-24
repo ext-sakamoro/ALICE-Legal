@@ -169,3 +169,25 @@ fn each_kind_gives_a_different_link() {
         }
     }
 }
+
+/// each kind's tag, the name its entries' links carry (part of every link after it)
+#[test]
+fn each_kind_has_its_tag() {
+    let tags: Vec<&str> = KINDS.iter().map(|k| k.tag()).collect();
+    assert_eq!(
+        tags,
+        [
+            "statute-created",
+            "statute-amended",
+            "contract-created",
+            "contract-fulfilled",
+            "contract-breached",
+            "procedure-started",
+            "procedure-completed",
+            "procedure-rejected",
+            "document-analyzed",
+            "template-compiled",
+        ]
+    );
+    const _: &str = AuditEventKind::DocumentAnalyzed.tag();
+}
