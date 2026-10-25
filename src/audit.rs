@@ -164,7 +164,41 @@ impl AuditLog {
         timestamp_ns: u64,
     ) -> u64 {
         let seq = self.next_sequence;
-        self.next_sequence += 1;
+        self.push_entry(seq, kind, entity_id, actor, content, timestamp_ns);
+        seq
+    }
+
+    /// Append an audit entry whose content is computed from the sequence it is assigned, and
+    /// return that sequence.
+    ///
+    /// The log assigns the sequence and passes it to `content`, which computes the entry's content
+    /// (for example a record whose id names the sequence); the content is then stored as with
+    /// [`AuditLog::append`]. `content` is given the sequence only, not the log. If `content`
+    /// panics, the log is left as it was: no sequence is consumed and no entry is added.
+    pub fn append_with(
+        &mut self,
+        kind: AuditEventKind,
+        entity_id: u64,
+        actor: &str,
+        timestamp_ns: u64,
+        content: impl FnOnce(u64) -> String,
+    ) -> u64 {
+        let seq = self.next_sequence;
+        let text = content(seq);
+        self.push_entry(seq, kind, entity_id, actor, &text, timestamp_ns);
+        seq
+    }
+
+    fn push_entry(
+        &mut self,
+        seq: u64,
+        kind: AuditEventKind,
+        entity_id: u64,
+        actor: &str,
+        content: &str,
+        timestamp_ns: u64,
+    ) {
+        self.next_sequence = seq + 1;
         let idx = self.entries.len();
         let prev_hash = self.head();
         self.entries.push(AuditEntry {
@@ -178,7 +212,6 @@ impl AuditLog {
         });
         // Update the O(1) entity index.
         self.entity_index.entry(entity_id).or_default().push(idx);
-        seq
     }
 
     /// Return all entries that relate to a specific entity id.
