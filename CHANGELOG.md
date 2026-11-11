@@ -30,6 +30,7 @@ All notable changes to ALICE-Legal will be documented in this file.
 
 ### Changed
 
+- 依存: alice-zip (rev 2261941、det-math 0.5.2 を引いていた) と alice-sign (rev 8a1b00d) を ALICE の各 repo の main (git、branch、版を指定: zip 0.11.0 / sign 0.1.0) に変え、alice-det-math は zip を通して 0.6.1 になった 識別子は変わらない (LawIdHasher v2 の 14 個の記録値の試験 `tests/law_id_golden.rs` がそのまま通る、ALICE-Legal の識別子は文字と整数だけで算術を使わない) `Cargo.lock` を追跡し、試験は `--locked`、CI に lock の alice-* がすべて git から来て alice-det-math が 1 つ以下であることを確かめる step を足した security-audit は commit した lock を検査する 共有の `sibling_coverage_guard` (試験も) を ALICE-Law の計画の版にした (git で引く依存も sibling として数える、この crate では 2 件) `scripts/preflight.sh` は生成し直した
 - `alice-sign` の git rev を 8a1b00d に上げた (HMAC-SHA256 の追加のみ、使っている API と byte 列は同じ)
 - `src/ffi.rs` と UE5 / Unity binding の license の行を `SPDX-License-Identifier: LicenseRef-Proprietary` に変更
 - `signed_contract` の Ed25519 / SHA-256 / `MerkleTree` と時刻印 (`TimeStamp` / `TimeStampToken`) を `alice-sign` (MIT OR Apache-2.0、公開、git rev 6b79a0ba、feature `timestamp`) から取るようにした 型と byte 列は同じ (これまでの依存先も同じ実装) 公開の source だけで build できる

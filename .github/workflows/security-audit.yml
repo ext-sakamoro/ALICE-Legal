@@ -63,13 +63,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
-      # fresh resolve (no Cargo.lock is committed); the guard (its tests first) checks that the
-      # resolve holds this crate and every path sibling, else the scan would compare nothing
-      - name: Resolve
+      # the committed lock; the guard (its tests first) checks that it holds this crate and every
+      # sibling, else the scan would compare nothing
+      - name: Lock covers the siblings
         run: |
           set -euo pipefail
-          rm -f Cargo.lock
-          cargo generate-lockfile
           python3 scripts/test_sibling_coverage_guard.py
           python3 scripts/sibling_coverage_guard.py --manifest Cargo.toml --lock Cargo.lock
       - name: Run cargo audit
@@ -90,14 +88,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
         run: cargo install --locked cargo-deny
-      # fresh resolve; cargo deny's crate graph must hold this crate and be no larger than the
-      # resolve
+      # the committed lock; cargo deny's crate graph must hold this crate and every sibling and be
+      # no larger than the lock
       - name: Run cargo deny check all
         run: |
           set -euo pipefail
-          rm -f Cargo.lock
-          cargo generate-lockfile
           python3 scripts/test_sibling_coverage_guard.py
-          cargo deny --all-features list --format json --layout crate > deny-graph.json
+          cargo deny --locked --all-features list --format json --layout crate > deny-graph.json
           python3 scripts/sibling_coverage_guard.py --manifest Cargo.toml --lock Cargo.lock --graph deny-graph.json
-          cargo deny --all-features check all
+          cargo deny --locked --all-features check all
