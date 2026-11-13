@@ -14,6 +14,9 @@ All notable changes to ALICE-Legal will be documented in this file.
 - `Procedure::verify_chain(&self)` を `verify_chain(&self, expected_head: &Digest)` に変更し、`Procedure::head` (次の段が持つ link) を追加 段の外に持った head と照合し、段の位置 (sequence が index と一致) も確かめる 検出するもの・しないものは `procedure` の module doc に記載
 - FFI: `alice_procedure_verify_chain(proc, head)` (32 byte の head を取る) に変更し、`alice_procedure_head(proc, out)` を追加 UE5 / Unity binding も同じ
 
+### Changed
+- 依存: alice-zip を 0.12 に (展開は上限付きだけの版、この crate は展開を呼ばない) lock は alice-zip 6c5fc8b / alice-det-math 6269efc、記録の識別子は不変 (`LawIdHasher` の golden で確かめた)
+
 ### Added
 - `AuditLog::append_with`: 割り当てた sequence を content を作る closure に渡して entry を足す (closure が panic すると log は変わらない)
 - `AuditEventKind::tag` (`const fn`): 種類ごとの連鎖の link が持つ名前 (`document-analyzed` 等)
